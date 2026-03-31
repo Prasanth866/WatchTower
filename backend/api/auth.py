@@ -35,7 +35,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     
     return new_user
 
-@router.post("/token", response_model=Token)
+@router.post("/login", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     
     login_mail=form_data.username.strip().lower()

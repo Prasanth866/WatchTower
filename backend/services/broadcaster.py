@@ -1,14 +1,16 @@
-import os
 import asyncio
 import structlog
 from fastapi import WebSocket
 from redis.asyncio import Redis
 from schemas.event import Event
 from api.topics import AVAILABLE_TOPICS
+from core.config import get_settings
+
+setting = get_settings()
 
 log = structlog.get_logger()
 
-REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_URL=setting.REDIS_URL
 
 class ConnectionManager:
     def __init__(self,redis:Redis):

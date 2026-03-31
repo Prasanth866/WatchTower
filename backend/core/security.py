@@ -1,13 +1,13 @@
-import os
+from core.config import get_settings
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import hashlib
-
-SECRET_KEY = os.getenv("SECRET_KEY", "temporary-dev-only-key")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1440))
+setting=get_settings()
+SECRET_KEY = setting.SECRET_KEY
+ALGORITHM = setting.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = setting.ACCESS_TOKEN_EXPIRE_MINUTES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
