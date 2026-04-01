@@ -18,7 +18,9 @@ if not DATABASE_URL.startswith("postgresql+asyncpg://"):
 engine= create_async_engine(
     DATABASE_URL, 
     echo=os.getenv("SQLALCHEMY_ECHO", "false").lower() == "true",
-    future=True
+    future=True,
+    max_overflow=0,
+    pool_size = 5
 )
 
 async_session = async_sessionmaker(
