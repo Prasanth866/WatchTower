@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String ,Float ,Boolean ,ForeignKey
+from sqlalchemy import DateTime, String ,Float ,Boolean ,ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 if TYPE_CHECKING:
@@ -46,3 +47,4 @@ class Subscription(Base):
         "User", 
         back_populates="subscriptions"
     )
+    last_alert_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True )

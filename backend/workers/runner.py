@@ -1,10 +1,12 @@
 import asyncio
 from workers.crypto import CryptoWorker
 from workers.basketball import BasketballWorker
+
+
 async def start_all_workers(manager):
     workers = [
-        CryptoWorker(manager,topic="crypto",interval=15),
-        BasketballWorker(manager,topic="basketball",interval=60)
+        CryptoWorker(manager, topic="crypto:btc", interval=15),
+        BasketballWorker(manager, topic="basketball:nba", interval=60),
     ]
     tasks = [asyncio.create_task(worker.run()) for worker in workers]
     try:

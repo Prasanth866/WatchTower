@@ -1,4 +1,5 @@
 import asyncio
+import re
 from fastapi.websockets import WebSocketState
 import structlog
 from fastapi import WebSocket, status
@@ -48,13 +49,27 @@ class ConnectionManager:
     async def publish(self,topic:str,event:Event):
         await self._redis.publish(topic,event.model_dump_json())
 
+    @staticmethod
+    def _topic_keys(topic: str) -> list[str]:
+        keys = [topic]
+        parts = topic.split(".")
+        if len(parts) > 1:
+            for i in range(len(parts) - 1, 0, -1):
+                keys.append(".".join(parts[:i]))
+        root = re.split(r"[:.]", topic, maxsplit=1)[0]
+        if root not in keys:
+            keys.append(root)
+        return keys
+
     async def _listen(self):
         pubsub = self._redis.pubsub()
         channels = [topic.name for topic in AVAILABLE_TOPICS]
+        patterns = [f"{topic.name}.*" for topic in AVAILABLE_TOPICS]
         await pubsub.subscribe(*channels)
-        log.info("Subscribed to Redis channels",channels=channels)
+        await pubsub.psubscribe(*patterns)
+        log.info("Subscribed to Redis channels and patterns", channels=channels, patterns=patterns)
         async for message in pubsub.listen():
-            if message["type"] != "message":
+            if message["type"] not in ["message", "pmessage"]:
                 continue
             try:
                 topic = message["channel"]
@@ -66,23 +81,26 @@ class ConnectionManager:
                 log.error("Error processing message",error=str(e))
                 continue
     async def _broadcast(self,topic:str,event:Event):
-        connections=self._connection.get(topic,{})
-        if not connections:
+        target_connections: dict[WebSocket, str] = {}
+        keys = self._topic_keys(topic)
+        for key in keys:
+            target_connections.update(self._connection.get(key, {}))
+
+        if not target_connections:
             log.info("No active connections for topic",topic=topic)
             return
-        
         payload = event.model_dump(mode="json")
 
-        tasks = []
-        websockets= list(connections.keys())
-        for ws in websockets:
-            tasks.append(ws.send_json(payload))
+        websockets= list(target_connections.keys())
+        tasks=[ws.send_json(payload) for ws in websockets]
+        
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i ,res in enumerate(results):
             if isinstance(res, Exception):
                 ws=websockets[i]
-                log.error("Broadcast failed for socket",error=str(ws),topic=topic)
-                await self.disconnect_socket(ws, topic)
+                log.error("Broadcast failed for socket",error=str(ws),topic=event.topic)
+                for key in keys:
+                    await self.disconnect_socket(ws, key)
 
     async def cleanup_dead_connections(self):
         for topic in list(self._connection.keys()):

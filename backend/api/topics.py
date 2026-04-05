@@ -10,8 +10,8 @@ class TopicInfo(BaseModel):
     interval_seconds : int
 
 AVAILABLE_TOPICS:list[TopicInfo] = [
-    TopicInfo(name="crypto",description="Live BTC prices",unit="USD",interval_seconds=15),
-    TopicInfo(name="basketball",description="Live NBA scores",unit="No of matches",interval_seconds=60)
+    TopicInfo(name="crypto:btc",description="Live BTC prices",unit="USD",interval_seconds=15),
+    TopicInfo(name="basketball:nba",description="Live NBA scores",unit="Points",interval_seconds=60)
 ]
 
 @router.get("/", response_model=list[TopicInfo])
