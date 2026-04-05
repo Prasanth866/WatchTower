@@ -32,7 +32,8 @@ class AbstractWorker(ABC):
                 break
             except Exception as e:
                 self.failure_count+=1
-                log.error("Worker error",topic=self.topic,error=str(e),failure_count=self.failure_count)
+                error_detail = f"{type(e).__name__}: {str(e)}"
+                log.error("Worker error", topic=self.topic, error=error_detail, failure_count=self.failure_count)
                 if self.failure_count >= self.max_tries:
                     log.critical("Max retries reached, stopping worker",topic=self.topic)
                     break
