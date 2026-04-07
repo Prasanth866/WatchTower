@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from api.dependencies import get_connection_manager
 from models.user import User
 from core.dependencies import get_current_user, get_db
+from services.broadcaster import ConnectionManager
 from services.subscription_service import (
     list_subscriptions_for_user,
     subscribe_user_to_topic,
@@ -23,11 +25,15 @@ async def subscribe_to_topic(topic: str, db: AsyncSession = Depends(get_db),curr
     return {"message": f"Subscribed to {topic}"}
 
 @router.delete("/{topic}", status_code=status.HTTP_204_NO_CONTENT)
-async def unsubscribe_from_topic(topic: str, request: Request,db: AsyncSession = Depends(get_db),current_user: User = Depends(get_current_user)):
+async def unsubscribe_from_topic(
+    topic: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    manager: ConnectionManager = Depends(get_connection_manager),
+):
     removed = await unsubscribe_user_from_topic(db, current_user.id, topic)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
 
-    manager = request.app.state.manager
     await manager.disconnect_user_from_topic(str(current_user.id), topic)
 

@@ -1,5 +1,5 @@
 from .user import User
-from .subscription import Subscription
+from .trigger import Trigger
 from core.database import Base
 
-__all__=["Base","User","Subscription"]
+__all__=["Base","User","Trigger"]

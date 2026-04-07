@@ -1,9 +1,8 @@
 from datetime import datetime, timezone, timedelta
-from uuid import UUID
 from fastapi import WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from models.subscription import Subscription
+from models.trigger import Trigger
 from schemas.event import Event
 import structlog
 
@@ -13,11 +12,11 @@ COOLDOWN_MINUTES = 5
 
 async def evaulate(user_id:str ,websocket:WebSocket, event:Event, db:AsyncSession):
     result = await db.execute(
-        select(Subscription).where(
-            Subscription.user_id == user_id, 
-            Subscription.topic == event.topic,
-            Subscription.is_active==True,
-            Subscription.threshold_value != None,
+        select(Trigger).where(
+            Trigger.user_id == user_id,
+            Trigger.topic == event.topic,
+            Trigger.is_active==True,
+            Trigger.threshold_value != None,
             )
     )
     subscriptions = result.scalars().all()

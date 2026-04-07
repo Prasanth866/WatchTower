@@ -2,6 +2,7 @@ from typing import AsyncGenerator
 from fastapi import HTTPException,status,Depends
 from pydantic_core import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from models.user import User
 from core.database import async_session
 from fastapi.security import OAuth2PasswordBearer

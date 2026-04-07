@@ -17,6 +17,10 @@ class ConnectionManager:
         self._redis = redis
         self._connection:dict[str,dict[WebSocket,str]] = {}
 
+    @property
+    def redis(self) -> Redis:
+        return self._redis
+
     async def startup(self):
         asyncio.create_task(self._listen())
         log.info("ConnectionManager started")

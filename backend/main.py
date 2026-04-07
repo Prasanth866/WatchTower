@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
-from api import auth ,websocket ,health ,subscription
+from api import auth ,websocket ,health ,subscription ,topics
 import asyncpg
 import redis.asyncio as aioredis
 from contextlib import asynccontextmanager
@@ -62,3 +62,4 @@ app.include_router(health.router,prefix='/health', tags=["health"])
 app.include_router(auth.router, prefix="/auth",tags=["credentials"])
 app.include_router(websocket.router,prefix="/ws",tags=["websocket"])
 app.include_router(subscription.router,prefix="/subscriptions",tags=["subscriptions"])
+app.include_router(topics.router,prefix="/topics",tags=["topics"])

@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from .user import User
 from core.database import Base
 
-class Subscription(Base):
-    __tablename__ = "subscriptions"
+class Trigger(Base):
+    __tablename__ = "triggers"
     
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 

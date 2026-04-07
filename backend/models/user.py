@@ -4,7 +4,7 @@ from sqlalchemy import String ,DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
-from models.subscription import Subscription
+from models.trigger import Trigger
 
 class User(Base):
     __tablename__ = "users"
@@ -31,8 +31,8 @@ class User(Base):
         default=lambda :datetime.now(timezone.utc)
     )
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(
-        "Subscription", 
+    subscriptions: Mapped[list["Trigger"]] = relationship(
+        "Trigger", 
         back_populates="user", 
         cascade="all, delete-orphan"
     )

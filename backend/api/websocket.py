@@ -1,28 +1,24 @@
-import asyncio
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
-from fastapi.websockets import WebSocketState
-from core.security import decode_access_token
+from api.dependencies import get_ws_connection_manager
+from services.broadcaster import ConnectionManager
+from services.websocket_service import authenticate_websocket_user
+
 router = APIRouter()
 
 @router.websocket("/{topic}")
-async def websocket_endpoint(websocket: WebSocket, topic: str):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    topic: str,
+    manager: ConnectionManager = Depends(get_ws_connection_manager),
+):
     await websocket.accept()
 
     try:
-        data = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
-        token = data.get("token")
-        if not token:
-            raise ValueError("Token missing")
-        user_data = decode_access_token(token)
-        user_id = user_data["sub"] if user_data else None
-        if not user_id:
-            raise ValueError("User ID missing in token")
-    except (Exception,asyncio.TimeoutError) as e:
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        user_id = await authenticate_websocket_user(websocket)
+    except Exception:
         return
-    manager = websocket.app.state.manager
+
     await manager.subscribe(websocket, topic, user_id)
 
     try:
