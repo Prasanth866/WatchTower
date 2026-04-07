@@ -5,7 +5,7 @@ import structlog
 from fastapi import WebSocket, status
 from redis.asyncio import Redis
 from schemas.event import Event
-from api.topics import AVAILABLE_TOPICS
+from core.topics import AVAILABLE_TOPICS
 from core.config import get_settings
 
 setting = get_settings()

@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 if TYPE_CHECKING:
     from .user import User
-from services.database import Base
+from core.database import Base
 
 class Subscription(Base):
     __tablename__ = "subscriptions"

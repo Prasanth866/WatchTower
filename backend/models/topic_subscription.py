@@ -2,7 +2,7 @@ from uuid import uuid4, UUID
 from sqlalchemy import String, ForeignKey, DateTime, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from services.database import Base
+from core.database import Base
 from datetime import datetime,timezone
 class TopicSubscription(Base):
     __tablename__ = "topic_subscriptions"

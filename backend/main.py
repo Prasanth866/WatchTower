@@ -7,7 +7,7 @@ import redis.asyncio as aioredis
 from contextlib import asynccontextmanager
 from core.config import get_settings
 from workers.runner import start_all_workers
-from services.database import engine, Base, CLEAN_DSN
+from core.database import engine, Base, CLEAN_DSN
 from services.broadcaster import ConnectionManager
 import asyncio
 log = structlog.get_logger()

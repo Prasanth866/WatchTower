@@ -3,7 +3,7 @@ from fastapi import HTTPException,status,Depends
 from pydantic_core import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.user import User
-from services.database import async_session
+from core.database import async_session
 from fastapi.security import OAuth2PasswordBearer
 from core.security import decode_access_token
 from uuid import UUID

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 import redis.asyncio as aioredis
-from services.database import engine
+from core.database import engine
 from sqlalchemy import text
 router = APIRouter()
 @router.get("")

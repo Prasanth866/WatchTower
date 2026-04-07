@@ -3,7 +3,7 @@ from datetime import datetime,timezone
 from sqlalchemy import String ,DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from services.database import Base
+from core.database import Base
 from models.subscription import Subscription
 
 class User(Base):
