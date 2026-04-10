@@ -1,3 +1,4 @@
+"""Database setup and configuration using SQLAlchemy."""
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from core.config import get_settings
@@ -27,6 +28,5 @@ engine = create_async_engine(
 
 async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
-
 class Base(DeclarativeBase):
-    pass
+    """Base class for SQLAlchemy models."""

@@ -17,4 +17,5 @@ dependencies = [
     "slowapi>=0.1.9",
     "sqlalchemy[asyncio]>=2.0.48",
     "structlog>=25.5.0",
+    "pylint>=4.0.5",
 ]

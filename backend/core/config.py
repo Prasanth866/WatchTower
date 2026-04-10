@@ -1,8 +1,10 @@
+"""Core configuration settings for the application."""
+from functools import lru_cache
 from pydantic import field_validator
 from pydantic_settings import BaseSettings,SettingsConfigDict
-from functools import lru_cache
 
 class Settings(BaseSettings):
+    """Application configuration settings."""
     DATABASE_URL: str
     REDIS_URL: str
     SECRET_KEY: str
@@ -18,9 +20,11 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def check_secret_strength(cls, v: str) -> str:
+        """Ensure the SECRET_KEY is sufficiently strong."""
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters for HS256 safety.")
         return v
 @lru_cache()
 def get_settings()->Settings:
+    """Get the application settings, cached for performance."""
     return Settings() # type: ignore

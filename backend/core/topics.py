@@ -1,7 +1,9 @@
+"""This module defines the available topics for the WebSocket server, along with their metadata."""
 from pydantic import BaseModel
 
 
 class TopicInfo(BaseModel):
+    """Represents metadata about a topic that clients can subscribe to."""
     name: str
     description: str | None = None
     unit: str

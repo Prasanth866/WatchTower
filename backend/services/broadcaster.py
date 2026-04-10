@@ -1,16 +1,16 @@
 import asyncio
 import re
 from fastapi.websockets import WebSocketState
-import structlog
 from fastapi import WebSocket, status
 from redis.asyncio import Redis
 from schemas.event import Event
 from core.topics import AVAILABLE_TOPICS
 from core.config import get_settings
+from core.logger import get_logger
 
 setting = get_settings()
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 class ConnectionManager:
     def __init__(self,redis:Redis):

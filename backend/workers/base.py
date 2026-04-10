@@ -1,10 +1,10 @@
 import asyncio
-import structlog
 from abc import ABC, abstractmethod
 from schemas.event import Event
 from services.broadcaster import ConnectionManager
+from core.logger import get_logger
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 class AbstractWorker(ABC):
     def __init__(self,manager:ConnectionManager,topic:str,interval:int=10,max_tries:int=10):

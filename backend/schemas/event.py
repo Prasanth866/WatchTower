@@ -1,8 +1,10 @@
-from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime, timezone
+"""Pydantic model for representing an event with topic, value, unit, timestamp, and metadata."""
 from typing import Any
+from datetime import datetime, timezone
+from pydantic import BaseModel, ConfigDict, Field
 
 class Event(BaseModel):
+    """Pydantic model for representing an event with topic, value, unit, timestamp, and metadata."""
     topic: str
     value: float
     unit: str

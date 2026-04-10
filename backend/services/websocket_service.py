@@ -1,14 +1,10 @@
-import asyncio
-
 from fastapi import WebSocket, status
-from fastapi.websockets import WebSocketState
-
 from core.security import decode_access_token
-from structlog import get_logger
+from core.logger import get_logger
 
+log = get_logger(__name__)
 
 async def authenticate_websocket_user(websocket: WebSocket) -> str:
-    log = get_logger()
     auth_header = websocket.headers.get("authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

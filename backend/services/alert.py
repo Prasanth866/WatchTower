@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.trigger import Trigger
 from schemas.event import Event
-import structlog
+from core.logger import get_logger
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 COOLDOWN_MINUTES = 5
 
