@@ -14,19 +14,11 @@ router = APIRouter()
 @router.post("/register", response_model=UserRead)
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     """Registers new user account."""
-    try:
-        new_user = await register_user(
-            db=db,
-            email=user.email,
-            password_hash=get_password_hash(user.password),
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
-    return new_user
+    return await register_user(
+        db=db,
+        email=user.email,
+        password_hash=get_password_hash(user.password),
+    )
 
 @router.post("/login", response_model=Token)
 async def login_for_access_token(

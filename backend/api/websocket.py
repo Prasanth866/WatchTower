@@ -1,6 +1,7 @@
 """WebSocket endpoint for real-time updates on specific topics."""
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from api.dependencies import get_ws_connection_manager
+from core.exception import WebSocketAuthenticationError
 from services.broadcaster import ConnectionManager
 from services.websocket_service import authenticate_websocket_user
 
@@ -17,7 +18,7 @@ async def websocket_endpoint(
 
     try:
         user_id = await authenticate_websocket_user(websocket)
-    except ValueError:
+    except WebSocketAuthenticationError:
         return
 
     await manager.subscribe(websocket, topic, user_id)

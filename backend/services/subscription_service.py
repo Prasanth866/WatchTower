@@ -3,8 +3,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.exception import ConflictException, NotFoundException
 from models.topic_subscription import TopicSubscription
-
+# from core.topics import 
 
 async def list_subscriptions_for_user(db: AsyncSession, user_id: UUID) -> list[str]:
     result = await db.execute(
@@ -14,6 +15,7 @@ async def list_subscriptions_for_user(db: AsyncSession, user_id: UUID) -> list[s
 
 
 async def subscribe_user_to_topic(db: AsyncSession, user_id: UUID, topic: str) -> None:
+
     existing_subscription = await db.execute(
         select(TopicSubscription).where(
             TopicSubscription.user_id == user_id,
@@ -21,13 +23,13 @@ async def subscribe_user_to_topic(db: AsyncSession, user_id: UUID, topic: str) -
         )
     )
     if existing_subscription.scalar_one_or_none():
-        raise ValueError("Already subscribed to this topic")
+        raise ConflictException("Already subscribed to this topic")
 
     db.add(TopicSubscription(user_id=user_id, topic=topic))
     await db.commit()
 
 
-async def unsubscribe_user_from_topic(db: AsyncSession, user_id: UUID, topic: str) -> bool:
+async def unsubscribe_user_from_topic(db: AsyncSession, user_id: UUID, topic: str) -> None:
     result = await db.execute(
         select(TopicSubscription).where(
             TopicSubscription.user_id == user_id,
@@ -36,8 +38,7 @@ async def unsubscribe_user_from_topic(db: AsyncSession, user_id: UUID, topic: st
     )
     subscription = result.scalar_one_or_none()
     if subscription is None:
-        return False
+        raise NotFoundException("Subscription not found")
 
     await db.delete(subscription)
     await db.commit()
-    return True

@@ -46,7 +46,7 @@ class Trigger(Base):
         default=5, 
         nullable=False
     )
-    current_notification_count: Mapped[int] = mapped_column(
+    current_alert_count: Mapped[int] = mapped_column(
         Integer,
         default=0,
         nullable=False

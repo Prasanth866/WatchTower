@@ -40,5 +40,5 @@ class TriggerRead(TriggerBase):
     cooldown_minutes: int
     notification_count: int
     created_at : datetime
-    
+    expires_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)

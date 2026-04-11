@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncpg
 import redis.asyncio as aioredis
 from core.logger import setup_logging, get_logger
+from core.exception import register_exception_handlers
 from api import api_router
 from core.config import get_settings
 from core.database import engine,Base,CLEAN_DSN
@@ -58,6 +59,7 @@ app = FastAPI(
     title="WatchTower",
     lifespan=lifespan
 )
+register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
