@@ -12,6 +12,15 @@ log = get_logger(__name__)
 
 COOLDOWN_MINUTES = 5
 
+
+def _topic_candidates(event_topic: str) -> set[str]:
+    """Return event topic and dot-prefix candidates for trigger matching."""
+    candidates = {event_topic}
+    parts = event_topic.split(".")
+    for i in range(len(parts) - 1, 0, -1):
+        candidates.add(".".join(parts[:i]))
+    return candidates
+
 def _is_triggered(trigger: Trigger, event: Event) -> bool:
     if trigger.threshold_direction == "above":
         return event.value > trigger.threshold_value
@@ -21,9 +30,10 @@ def _is_triggered(trigger: Trigger, event: Event) -> bool:
 
 
 async def process_event_alerts(db: AsyncSession, manager, event: Event) -> None:
+    topic_candidates = _topic_candidates(event.topic)
     result = await db.execute(
         select(Trigger).where(
-            Trigger.topic == event.topic,
+            Trigger.topic.in_(topic_candidates),
             Trigger.is_active.is_(True),
         )
     )
