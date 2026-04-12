@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SQLALCHEMY_ECHO: bool = False
     BASKETBALL_API_KEY: str
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    FRONTEND_URL: str = "http://localhost:5173"
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -25,6 +31,7 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be at least 32 characters for HS256 safety.")
         return v
 @lru_cache()
+
 def get_settings()->Settings:
     """Get the application settings, cached for performance."""
     return Settings() # type: ignore

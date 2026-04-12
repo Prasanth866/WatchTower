@@ -6,8 +6,9 @@ from core.security import get_password_hash, create_access_token
 from core.dependencies import get_db
 from core.dependencies import get_current_user
 from models.user import User
-from schemas.user import UserCreate, UserRead, Token
+from schemas.user import UserCreate, UserRead, Token, ForgotPasswordRequest, ResetPasswordRequest
 from services.auth_service import authenticate_user, register_user
+from services.password_reset_service import request_password_reset, reset_password
 
 router = APIRouter()
 
@@ -43,3 +44,21 @@ async def login_for_access_token(
 async def read_current_user(current_user: User = Depends(get_current_user)):
     """Returns the currently authenticated user's information."""
     return current_user
+
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    await request_password_reset(payload.email, db)
+    return {"message": "If that email exists, a reset link has been sent"}
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password_endpoint(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    await reset_password(payload.token, payload.new_password, db)
+    return {"message": "Password reset successfully. Please log in."}

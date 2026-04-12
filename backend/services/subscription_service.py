@@ -3,9 +3,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exception import ConflictException, NotFoundException
+from core.exception import BadRequestException, ConflictException, NotFoundException
+from core.topics import VALID_TOPICS
 from models.topic_subscription import TopicSubscription
-# from core.topics import 
+
+
+def _validate_topic(topic: str) -> None:
+    if topic not in VALID_TOPICS:
+        raise BadRequestException(f"Invalid topic '{topic}'")
 
 async def list_subscriptions_for_user(db: AsyncSession, user_id: UUID) -> list[str]:
     result = await db.execute(
@@ -15,6 +20,7 @@ async def list_subscriptions_for_user(db: AsyncSession, user_id: UUID) -> list[s
 
 
 async def subscribe_user_to_topic(db: AsyncSession, user_id: UUID, topic: str) -> None:
+    _validate_topic(topic)
 
     existing_subscription = await db.execute(
         select(TopicSubscription).where(
@@ -30,6 +36,8 @@ async def subscribe_user_to_topic(db: AsyncSession, user_id: UUID, topic: str) -
 
 
 async def unsubscribe_user_from_topic(db: AsyncSession, user_id: UUID, topic: str) -> None:
+    _validate_topic(topic)
+
     result = await db.execute(
         select(TopicSubscription).where(
             TopicSubscription.user_id == user_id,

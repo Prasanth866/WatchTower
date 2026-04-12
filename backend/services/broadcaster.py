@@ -4,9 +4,11 @@ from fastapi.websockets import WebSocketState
 from fastapi import WebSocket, status
 from redis.asyncio import Redis
 from schemas.event import Event
+from core.database import async_session
 from core.topics import AVAILABLE_TOPICS
 from core.config import get_settings
 from core.logger import get_logger
+from services.alert import process_event_alerts
 
 setting = get_settings()
 
@@ -50,6 +52,11 @@ class ConnectionManager:
             finally:
                 await self.disconnect_socket(ws, topic)
 
+    def is_user_connected(self, user_id: str, topic: str) -> bool:
+        """Return True when the user has at least one live socket on the topic."""
+        topic_connections = self._connection.get(topic, {})
+        return any(str(uid) == str(user_id) for uid in topic_connections.values())
+
     async def publish(self,topic:str,event:Event):
         await self._redis.publish(topic,event.model_dump_json())
 
@@ -80,6 +87,8 @@ class ConnectionManager:
                 if isinstance(topic, bytes):
                     topic = topic.decode()
                 event= Event.model_validate_json(message["data"])
+                async with async_session() as db:
+                    await process_event_alerts(db, self, event)
                 await self._broadcast(topic,event)
             except Exception as e:
                 log.error("Error processing message",error=str(e))

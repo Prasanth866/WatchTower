@@ -15,3 +15,4 @@ AVAILABLE_TOPICS: list[TopicInfo] = [
     TopicInfo(name="basketball:nba", description="Live NBA scores", unit="Points", interval_seconds=60),
 ]
 
+VALID_TOPICS = {topic_info.name for topic_info in AVAILABLE_TOPICS}
