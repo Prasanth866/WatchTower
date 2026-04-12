@@ -16,3 +16,7 @@ class Event(BaseModel):
         str_strip_whitespace=True,
         json_encoders={datetime: lambda v: v.isoformat()}
     )
+
+class EventLog(Event):
+    """Pydantic model for representing an event log entry, extending the base Event model with an ID."""
+    id: str

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncpg
 import redis.asyncio as aioredis
+import models.event_log  # noqa: F401
 from core.logger import setup_logging, get_logger
 from core.exception import register_exception_handlers
 from api import api_router

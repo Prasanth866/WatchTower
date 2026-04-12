@@ -8,6 +8,7 @@ from core.database import async_session
 from core.topics import AVAILABLE_TOPICS
 from core.config import get_settings
 from core.logger import get_logger
+from models.event_log import EventLog
 from services.alert import process_event_alerts
 
 setting = get_settings()
@@ -94,6 +95,18 @@ class ConnectionManager:
                 log.error("Error processing message",error=str(e))
                 continue
     async def _broadcast(self,topic:str,event:Event):
+        async with async_session() as db:
+            db.add(
+                EventLog(
+                    topic=event.topic,
+                    value=event.value,
+                    unit=event.unit,
+                    timestamp=event.timestamp,
+                    metadata_=event.metadata,
+                )
+            )
+            await db.commit()
+
         target_connections: dict[WebSocket, str] = {}
         keys = self._topic_keys(topic)
         for key in keys:
