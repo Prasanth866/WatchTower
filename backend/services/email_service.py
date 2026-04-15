@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from uuid import UUID
 import smtplib
@@ -17,23 +18,6 @@ def _smtp_configured() -> bool:
 
 
 async def queue_alert_email(
-    db: AsyncSession,
-    user_id: UUID,
-    to_email: str,
-    subject: str,
-    body: str,
-) -> None:
-    queued = EmailQueue(
-        user_id=user_id,
-        to_email=to_email,
-        subject=subject,
-        body=body,
-        sent=False,
-    )
-    db.add(queued)
-
-
-async def queue_simple_email(
     db: AsyncSession,
     user_id: UUID,
     to_email: str,
@@ -74,7 +58,7 @@ async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
 
     for email in pending:
         try:
-            _send_email(email.to_email, email.subject, email.body)
+            await asyncio.to_thread(_send_email, email.to_email, email.subject, email.body)
             email.sent = True
             email.sent_at = datetime.now(timezone.utc)
             sent_count += 1

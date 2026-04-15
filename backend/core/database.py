@@ -1,11 +1,17 @@
 """Database setup and configuration using SQLAlchemy."""
+import os
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-from core.config import get_settings
 
-settings = get_settings()
 
-DATABASE_URL = settings.DATABASE_URL.strip()
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 if not DATABASE_URL:
     raise ValueError(
@@ -20,7 +26,7 @@ if not DATABASE_URL.startswith("postgresql+asyncpg://"):
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=settings.SQLALCHEMY_ECHO,
+    echo=_env_bool("SQLALCHEMY_ECHO", default=False),
     future=True,
     max_overflow=0,
     pool_size=5,

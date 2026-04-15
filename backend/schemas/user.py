@@ -69,3 +69,11 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     """Pydantic model for representing data extracted from an authentication token"""
     user_id: Optional[uuid.UUID] = None
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    email_notifications: bool
+
+
+class NotificationPreferenceResponse(BaseModel):
+    email_notifications: bool

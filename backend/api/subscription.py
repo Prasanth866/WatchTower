@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies import get_connection_manager
 from models.user import User
 from core.dependencies import get_current_user, get_db
+from schemas.subscription import TopicSubscriptionActionResponse
 from services.broadcaster import ConnectionManager
 from services.subscription_service import (
     list_subscriptions_for_user,
@@ -21,7 +22,7 @@ async def list_subscriptions(
     """List all topics the current user is subscribed to."""
     return await list_subscriptions_for_user(db, current_user.id)
 
-@router.post("/{topic}", status_code=status.HTTP_201_CREATED)
+@router.post("/{topic}", status_code=status.HTTP_201_CREATED, response_model=TopicSubscriptionActionResponse)
 async def subscribe_to_topic(
             topic: str,
             db: AsyncSession = Depends(get_db),

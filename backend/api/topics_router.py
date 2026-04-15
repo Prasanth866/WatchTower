@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.dependencies import get_current_user, get_db
 from core.topics import AVAILABLE_TOPICS, TopicInfo
-from models.event_log import EventLog
+from models.event_log import EventLog as EventLogModel
 from models.user import User
-from schemas.event import EventLog
+from schemas.event import EventLog as EventLogRead
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ async def list_topics():
     return AVAILABLE_TOPICS
 
 
-@router.get("/{topic}/history",response_model=list[EventLog])
+@router.get("/{topic}/history",response_model=list[EventLogRead])
 async def get_topic_history(
     topic: str,
     limit: int = Query(default=60, ge=1, le=5760),
@@ -26,14 +26,14 @@ async def get_topic_history(
     """Return recent event history for a topic, ordered oldest to newest."""
     _ = current_user
     result = await db.execute(
-        select(EventLog)
-        .where(EventLog.topic == topic)
-        .order_by(EventLog.timestamp.desc())
+        select(EventLogModel)
+        .where(EventLogModel.topic == topic)
+        .order_by(EventLogModel.timestamp.desc())
         .limit(limit)
     )
     events = list(reversed(result.scalars().all()))
     return [
-        EventLog(
+        EventLogRead(
             id=str(event.id),
             topic=event.topic,
             value=event.value,

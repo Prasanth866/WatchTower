@@ -1,7 +1,7 @@
 """SQLAlchemy model for the User entity and relationships to triggers."""
 import uuid
 from datetime import datetime,timezone
-from sqlalchemy import String ,DateTime
+from sqlalchemy import String ,DateTime, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
@@ -22,6 +22,16 @@ class User(Base):
     )
     password_hash: Mapped[str] = mapped_column(
         String,
+        nullable=False
+    )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    email_notifications: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
         nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(

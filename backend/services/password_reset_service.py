@@ -8,7 +8,7 @@ from core.logger import get_logger
 from core.security import get_password_hash
 from models.password_reset import PasswordReset
 from models.user import User
-from services.email_service import queue_simple_email
+from services.email_service import queue_alert_email
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -45,7 +45,7 @@ async def request_password_reset(email: str, db: AsyncSession) -> None:
     )
 
     reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-    await queue_simple_email(
+    await queue_alert_email(
         db=db,
         user_id=user.id,
         to_email=user.email,
@@ -80,7 +80,7 @@ async def reset_password(token: str, new_password: str, db: AsyncSession) -> Non
     user.password_hash = get_password_hash(new_password)
     reset.used = True
 
-    await queue_simple_email(
+    await queue_alert_email(
         db=db,
         user_id=user.id,
         to_email=user.email,

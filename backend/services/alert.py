@@ -29,7 +29,7 @@ def _is_triggered(trigger: Trigger, event: Event) -> bool:
     return False
 
 
-async def process_event_alerts(db: AsyncSession, manager, event: Event) -> None:
+async def process_event_alerts(db: AsyncSession, manager, event: Event, *, auto_commit: bool = True) -> None:
     topic_candidates = _topic_candidates(event.topic)
     result = await db.execute(
         select(Trigger).where(
@@ -80,5 +80,5 @@ async def process_event_alerts(db: AsyncSession, manager, event: Event) -> None:
         trigger.current_alert_count += 1
         touched = True
 
-    if touched:
+    if touched and auto_commit:
         await db.commit()

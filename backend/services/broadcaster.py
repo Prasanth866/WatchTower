@@ -1,15 +1,14 @@
 import asyncio
 import re
+from contextlib import suppress
 from fastapi.websockets import WebSocketState
 from fastapi import WebSocket, status
 from redis.asyncio import Redis
 from schemas.event import Event
-from core.database import async_session
 from core.topics import AVAILABLE_TOPICS
 from core.config import get_settings
 from core.logger import get_logger
-from models.event_log import EventLog
-from services.alert import process_event_alerts
+from services.event_processing_service import process_event_side_effects
 
 setting = get_settings()
 
@@ -19,14 +18,47 @@ class ConnectionManager:
     def __init__(self,redis:Redis):
         self._redis = redis
         self._connection:dict[str,dict[WebSocket,str]] = {}
+        self._listen_task: asyncio.Task | None = None
+        self._background_tasks: set[asyncio.Task] = set()
+        self._side_effect_limit = max(1, int(getattr(setting, "SIDE_EFFECT_CONCURRENCY", 16)))
+        self._side_effect_semaphore = asyncio.Semaphore(self._side_effect_limit)
+        self._send_timeout_seconds = float(getattr(setting, "WEBSOCKET_SEND_TIMEOUT_SECONDS", 2.0))
 
     @property
     def redis(self) -> Redis:
         return self._redis
 
     async def startup(self):
-        asyncio.create_task(self._listen())
+        self._listen_task = asyncio.create_task(self._listen())
         log.info("ConnectionManager started")
+
+    async def shutdown(self):
+        if self._listen_task:
+            self._listen_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._listen_task
+            self._listen_task = None
+
+        if self._background_tasks:
+            for task in list(self._background_tasks):
+                task.cancel()
+            await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
+            self._background_tasks.clear()
+
+    def _track_background_task(self, task: asyncio.Task) -> None:
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _process_side_effects_async(self, event: Event) -> None:
+        try:
+            await process_event_side_effects(self, event)
+        except Exception as e:
+            log.error("Error in event side-effects", topic=event.topic, error=str(e))
+        finally:
+            self._side_effect_semaphore.release()
+
+    async def _send_with_timeout(self, ws: WebSocket, payload: dict) -> None:
+        await asyncio.wait_for(ws.send_json(payload), timeout=self._send_timeout_seconds)
 
     async def subscribe(self,websocket:WebSocket,topic:str,user_id:str):
         self._connection.setdefault(topic,{})[websocket] = user_id
@@ -54,9 +86,16 @@ class ConnectionManager:
                 await self.disconnect_socket(ws, topic)
 
     def is_user_connected(self, user_id: str, topic: str) -> bool:
-        """Return True when the user has at least one live socket on the topic."""
-        topic_connections = self._connection.get(topic, {})
-        return any(str(uid) == str(user_id) for uid in topic_connections.values())
+        """Return True when the user has at least one live socket on topic or its parent keys."""
+        for key in self._topic_keys(topic):
+            topic_connections = self._connection.get(key, {})
+            if any(str(uid) == str(user_id) for uid in topic_connections.values()):
+                return True
+        return False
+
+    def get_connection_counts(self) -> dict[str, int]:
+        """Return current websocket connection counts grouped by topic."""
+        return {topic: len(connections) for topic, connections in self._connection.items()}
 
     async def publish(self,topic:str,event:Event):
         await self._redis.publish(topic,event.model_dump_json())
@@ -77,48 +116,41 @@ class ConnectionManager:
         pubsub = self._redis.pubsub()
         channels = [topic.name for topic in AVAILABLE_TOPICS]
         patterns = [f"{topic.name}.*" for topic in AVAILABLE_TOPICS]
-        await pubsub.subscribe(*channels)
-        await pubsub.psubscribe(*patterns)
-        log.info("Subscribed to Redis channels and patterns", channels=channels, patterns=patterns)
-        async for message in pubsub.listen():
-            if message["type"] not in ["message", "pmessage"]:
-                continue
-            try:
-                topic = message["channel"]
-                if isinstance(topic, bytes):
-                    topic = topic.decode()
-                event= Event.model_validate_json(message["data"])
-                async with async_session() as db:
-                    await process_event_alerts(db, self, event)
-                await self._broadcast(topic,event)
-            except Exception as e:
-                log.error("Error processing message",error=str(e))
-                continue
-    async def _broadcast(self,topic:str,event:Event):
-        async with async_session() as db:
-            db.add(
-                EventLog(
-                    topic=event.topic,
-                    value=event.value,
-                    unit=event.unit,
-                    timestamp=event.timestamp,
-                    metadata_=event.metadata,
-                )
-            )
-            await db.commit()
+        try:
+            await pubsub.subscribe(*channels)
+            await pubsub.psubscribe(*patterns)
+            log.info("Subscribed to Redis channels and patterns", channels=channels, patterns=patterns)
+            async for message in pubsub.listen():
+                if message["type"] not in ["message", "pmessage"]:
+                    continue
+                try:
+                    topic = message["channel"]
+                    if isinstance(topic, bytes):
+                        topic = topic.decode()
+                    event= Event.model_validate_json(message["data"])
+                    await self._broadcast(topic,event)
+                    await self._side_effect_semaphore.acquire()
+                    task = asyncio.create_task(self._process_side_effects_async(event))
+                    self._track_background_task(task)
+                except Exception as e:
+                    log.error("Error processing message",error=str(e))
+                    continue
+        finally:
+            await pubsub.close()
 
+    async def _broadcast(self,topic:str,event:Event):
         target_connections: dict[WebSocket, str] = {}
         keys = self._topic_keys(topic)
         for key in keys:
             target_connections.update(self._connection.get(key, {}))
 
         if not target_connections:
-            log.info("No active connections for topic",topic=topic)
+            log.debug("No active connections for topic",topic=topic)
             return
         payload = event.model_dump(mode="json")
 
         websockets= list(target_connections.keys())
-        tasks=[ws.send_json(payload) for ws in websockets]
+        tasks=[self._send_with_timeout(ws, payload) for ws in websockets]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i ,res in enumerate(results):
@@ -139,7 +171,7 @@ class ConnectionManager:
 
                 try:
                     await ws.send_json({"type":"ping"})
-                except Exception as e:
+                except Exception:
                     dead.append(ws)
             for ws in dead:
                 await self.disconnect_socket(ws, topic)

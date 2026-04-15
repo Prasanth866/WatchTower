@@ -1,15 +1,22 @@
 from datetime import datetime, timezone
 import httpx
+from core.worker_status import WorkerStatusRegistry
 from schemas.event import Event
 from workers.base import AbstractWorker
 from services.broadcaster import ConnectionManager
 from core.config import get_settings
 
 class BasketballWorker(AbstractWorker):
-    def __init__(self, manager: ConnectionManager, topic: str, interval: int = 60):
+    def __init__(
+        self,
+        manager: ConnectionManager,
+        topic: str,
+        interval: int = 60,
+        status_registry: WorkerStatusRegistry | None = None,
+    ):
         self.api_key = get_settings().BASKETBALL_API_KEY
         self.url = "https://api.balldontlie.io/v1/games"
-        super().__init__(manager, topic, interval)
+        super().__init__(manager, topic, interval, status_registry=status_registry)
 
 
     async def fetch(self) -> list[Event]:
