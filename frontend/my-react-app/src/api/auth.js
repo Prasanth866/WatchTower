@@ -16,8 +16,9 @@ export async function loginUser({ email, password }) {
   return data;
 }
 
-export async function fetchCurrentUser() {
-  const { data } = await apiClient.get("/auth/me");
+export async function fetchCurrentUser(token) {
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  const { data } = await apiClient.get("/auth/me", { headers });
   return data;
 }
 

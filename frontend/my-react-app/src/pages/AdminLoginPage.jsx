@@ -5,23 +5,37 @@ import { Link, useNavigate } from "react-router-dom";
 import { fetchCurrentUser, loginUser } from "../api/auth";
 import { useAuthStore } from "../store/authStore";
 
-export default function LoginPage() {
+export default function AdminLoginPage() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
 
   const loginMutation = useMutation({
     mutationFn: loginUser,
     onSuccess: async (session) => {
-      setError("");
-      setSession({ token: session.access_token, user: null });
-      const user = await fetchCurrentUser(session.access_token);
-      setSession({ token: session.access_token, user });
-      navigate("/", { replace: true });
+      try {
+        setError("");
+        setSession({ token: session.access_token, user: null });
+        const user = await fetchCurrentUser(session.access_token);
+
+        if (!user?.is_admin) {
+          clearSession();
+          setError("This account is not an admin account.");
+          return;
+        }
+
+        setSession({ token: session.access_token, user });
+        navigate("/admin", { replace: true });
+      } catch (err) {
+        clearSession();
+        setError(err?.response?.data?.detail || "Admin sign in failed");
+      }
     },
     onError: (err) => {
-      setError(err?.response?.data?.detail || "Login failed");
+      clearSession();
+      setError(err?.response?.data?.detail || "Admin sign in failed");
     },
   });
 
@@ -30,14 +44,14 @@ export default function LoginPage() {
       <Paper elevation={8} className="w-full max-w-md rounded-2xl bg-slate-900 p-8 text-slate-100">
         <Stack spacing={3}>
           <Typography variant="h4" sx={{ fontWeight: 700 }}>
-            Sign in
+            Admin sign in
           </Typography>
-          <Typography color="text.secondary">Connect to your WatchTower workspace.</Typography>
+          <Typography color="text.secondary">Use an admin account to access control features.</Typography>
 
           {error ? <Alert severity="error">{error}</Alert> : null}
 
           <TextField
-            label="Email"
+            label="Admin email"
             type="email"
             value={form.email}
             onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
@@ -59,14 +73,10 @@ export default function LoginPage() {
             onClick={() => loginMutation.mutate(form)}
             disabled={loginMutation.isPending}
           >
-            {loginMutation.isPending ? "Signing in..." : "Sign in"}
+            {loginMutation.isPending ? "Signing in..." : "Sign in as admin"}
           </Button>
 
-          <Stack direction="row" justifyContent="space-between">
-            <Link to="/register" className="text-sky-400">Create account</Link>
-            <Link to="/forgot-password" className="text-sky-400">Forgot password?</Link>
-          </Stack>
-          <Link to="/admin/login" className="text-sky-400">Admin login</Link>
+          <Link to="/login" className="text-sky-400">Back to user sign in</Link>
         </Stack>
       </Paper>
     </Box>
