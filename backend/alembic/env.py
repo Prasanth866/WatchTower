@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from core.database import Base
+from core.database_url import to_asyncpg_database_url
 import models  # noqa: F401 - ensure all models are imported so their metadata is registered
 
 config = context.config
@@ -39,9 +40,7 @@ def _resolve_database_url() -> str:
             "DATABASE_URL is required for Alembic migrations. "
             "Set DATABASE_URL environment variable or provide it in backend/.env"
         )
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return database_url
+    return to_asyncpg_database_url(database_url)
 
 
 config.set_main_option("sqlalchemy.url", _resolve_database_url())

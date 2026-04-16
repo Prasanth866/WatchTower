@@ -33,16 +33,19 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-3. Apply DB migrations:
+3. Application URLs:
+
+```text
+Frontend: http://localhost:3000
+API: http://localhost:8000/api/v1
+```
+
+Database migrations run automatically when the backend container starts.
+
+4. Optional manual migration command:
 
 ```bash
 docker exec -it fastapi_app alembic upgrade head
-```
-
-4. API base URL:
-
-```text
-http://localhost:8000/api/v1
 ```
 
 ## Development
@@ -64,6 +67,6 @@ uv run pytest -q
 
 ## Deployment Notes
 
-- Run migrations before app startup in production.
+- Migrations are executed on backend startup via container entrypoint.
 - Use `ENABLE_WORKERS=false` for API-only replicas in multi-replica deployments.
 - Configure `CORS_ALLOWED_ORIGINS` explicitly for your environments.

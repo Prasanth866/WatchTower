@@ -2,9 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /backend
 
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
-RUN apt-get update && apt-get install -y curl
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+	&& rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
 
@@ -12,4 +13,6 @@ RUN uv pip install --system .
 
 COPY . .
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN chmod +x /backend/scripts/entrypoint.sh
+
+CMD ["/backend/scripts/entrypoint.sh"]

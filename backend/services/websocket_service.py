@@ -7,11 +7,16 @@ log = get_logger(__name__)
 
 async def authenticate_websocket_user(websocket: WebSocket) -> str:
     auth_header = websocket.headers.get("authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        raise WebSocketAuthenticationError("Missing or invalid authorization header")
+    token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):]
+    else:
+        token = websocket.query_params.get("token")
 
-    token = auth_header[len("Bearer "):]
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        raise WebSocketAuthenticationError("Missing authorization token")
+
     try:
         user_data = decode_access_token(token)
         user_id = user_data["sub"] if user_data else None

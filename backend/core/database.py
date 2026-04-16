@@ -2,6 +2,7 @@
 import os
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from core.database_url import to_asyncpg_database_url, to_sync_database_url
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -19,10 +20,8 @@ if not DATABASE_URL:
         "Check your .env file or Docker Compose settings."
     )
 
-CLEAN_DSN = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1)
-
-if not DATABASE_URL.startswith("postgresql+asyncpg://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+DATABASE_URL = to_asyncpg_database_url(DATABASE_URL)
+CLEAN_DSN = to_sync_database_url(DATABASE_URL)
 
 engine = create_async_engine(
     DATABASE_URL,
