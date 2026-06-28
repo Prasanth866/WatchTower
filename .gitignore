@@ -211,3 +211,6 @@ __marimo__/
 
 # ide
 .idea/
+
+# packages
+node_modules/
