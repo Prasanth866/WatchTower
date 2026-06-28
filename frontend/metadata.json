@@ -1,0 +1,6 @@
+{
+  "name": "WatchTower",
+  "description": "A high-fidelity real-time cryptocurrency price monitoring and paper trading platform with interactive charts, trigger wizard, and transaction ledger.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
