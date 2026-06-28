@@ -26,23 +26,25 @@ class CryptoWorker(AbstractWorker):
         self.url = "https://api.coingecko.com/api/v3/simple/price"
         headers = {"User-Agent": "CryptoTracker/1.0 (FastAPI Worker)"}
         self.client = httpx.AsyncClient(
-            timeout=15, 
-            headers=headers, 
+            timeout=15,
+            headers=headers,
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0", retries=3)
+            # NOTE: transport-level retries are intentionally NOT set here.
+            # The AbstractWorker circuit-breaker (base.py) is the authoritative
+            # retry boundary.  Adding transport retries on top would multiply
+            # actual network attempts by max_tries, cause unexpectedly long
+            # delays, and produce misleading failure_count metrics.
+            transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0"),
         )
-    
+
     async def fetch(self) -> list[Event]:
         coin_ids = ",".join(self.coin_mapping.keys())
         params = {
             "ids": coin_ids,
-            "vs_currencies": "usd"
+            "vs_currencies": "usd",
         }
         try:
-            response = await self.client.get(
-                self.url,
-                params=params,
-            )
+            response = await self.client.get(self.url, params=params)
             response.raise_for_status()
             data = response.json()
         except httpx.ConnectError:
@@ -58,7 +60,7 @@ class CryptoWorker(AbstractWorker):
             price = coin_data.get("usd")
             if price is None:
                 continue
-            
+
             events.append(
                 Event(
                     topic=topic,
@@ -67,8 +69,8 @@ class CryptoWorker(AbstractWorker):
                     metadata={
                         "coin": coin_id,
                         "source": "coingecko",
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    }
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
                 )
             )
         return events

@@ -31,8 +31,11 @@ class AbstractWorker(ABC):
         self.circuit_state = "closed"
         self._circuit_open_until: datetime | None = None
         self.status_registry = status_registry
+
+    async def _on_init(self) -> None:
+        """Called once at the start of run() to perform async initialisation."""
         if self.status_registry:
-            self.status_registry.mark_starting(
+            await self.status_registry.mark_starting(
                 self.topic,
                 "worker initialized",
                 details={"circuit_state": self.circuit_state},
@@ -46,15 +49,6 @@ class AbstractWorker(ABC):
         self.circuit_state = "open"
         self._circuit_open_until = datetime.now(timezone.utc) + timedelta(seconds=self.circuit_open_seconds)
         log.error("Worker circuit opened", topic=self.topic, reason=reason, open_seconds=self.circuit_open_seconds)
-        if self.status_registry:
-            self.status_registry.mark_degraded(
-                self.topic,
-                "circuit_open",
-                details={
-                    "circuit_state": self.circuit_state,
-                    "open_until": self._circuit_open_until.isoformat() if self._circuit_open_until else None,
-                },
-            )
 
     def _close_circuit(self) -> None:
         self.circuit_state = "closed"
@@ -72,7 +66,7 @@ class AbstractWorker(ABC):
 
         self.circuit_state = "half_open"
         if self.status_registry:
-            self.status_registry.mark_degraded(
+            await self.status_registry.mark_degraded(
                 self.topic,
                 "circuit_half_open",
                 details={"circuit_state": self.circuit_state},
@@ -85,6 +79,7 @@ class AbstractWorker(ABC):
         return max(float(self.interval), base_delay * jitter)
 
     async def run(self):
+        await self._on_init()
         delay = self.interval
         while True:
             try:
@@ -102,14 +97,14 @@ class AbstractWorker(ABC):
                 delay = self.interval
                 self.failure_count = 0
                 if self.status_registry:
-                    self.status_registry.mark_healthy(
+                    await self.status_registry.mark_healthy(
                         self.topic,
                         details={"circuit_state": self.circuit_state},
                     )
             except asyncio.CancelledError:
                 log.info("Worker cancelled", topic=self.topic)
                 if self.status_registry:
-                    self.status_registry.mark_stopped(
+                    await self.status_registry.mark_stopped(
                         self.topic,
                         "worker cancelled",
                         details={"circuit_state": self.circuit_state},
@@ -120,7 +115,7 @@ class AbstractWorker(ABC):
                 error_detail = f"{type(e).__name__}: {str(e)}"
                 log.error("Worker error", topic=self.topic, error=error_detail, failure_count=self.failure_count)
                 if self.status_registry:
-                    self.status_registry.mark_degraded(
+                    await self.status_registry.mark_degraded(
                         self.topic,
                         error_detail,
                         details={
@@ -131,7 +126,7 @@ class AbstractWorker(ABC):
                 if self.failure_count >= self.max_tries:
                     log.critical("Max retries reached, stopping worker", topic=self.topic)
                     if self.status_registry:
-                        self.status_registry.mark_stopped(
+                        await self.status_registry.mark_stopped(
                             self.topic,
                             "max retries reached",
                             details={"circuit_state": self.circuit_state},
@@ -139,8 +134,16 @@ class AbstractWorker(ABC):
                     break
                 if self.failure_count >= self.circuit_failure_threshold:
                     self._trip_circuit(error_detail)
+                    if self.status_registry:
+                        await self.status_registry.mark_degraded(
+                            self.topic,
+                            "circuit_open",
+                            details={
+                                "circuit_state": self.circuit_state,
+                                "open_until": self._circuit_open_until.isoformat() if self._circuit_open_until else None,
+                            },
+                        )
                     delay = self.interval
                     continue
                 delay = self._next_backoff_delay(delay)
             await asyncio.sleep(delay)
-    

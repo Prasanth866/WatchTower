@@ -101,7 +101,7 @@ class Holding(Base):
 
 
 class Transaction(Base):
-    """Represents a executed trade transaction record (BUY/SELL) log."""
+    """Represents an executed trade transaction record (BUY/SELL) log."""
     __tablename__ = "transactions"
 
     id: Mapped[uuid.UUID] = mapped_column(

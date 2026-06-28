@@ -21,7 +21,8 @@ async def get_health_status(redis_client: Redis, worker_status=None, manager=Non
         status["postgres"] = "error"
 
     if worker_status is not None:
-        status["workers"] = worker_status.snapshot()
+        # snapshot() is now async — must be awaited
+        status["workers"] = await worker_status.snapshot()
 
     if manager is not None and hasattr(manager, "side_effect_runtime"):
         status["side_effects"] = manager.side_effect_runtime()

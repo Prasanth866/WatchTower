@@ -3,14 +3,13 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Add backend/ to python search path to resolve local modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import select
-
+from typing import cast, Any
+from uuid import UUID
 from core.database import async_session
 from core.security import get_password_hash
-from core.coins import AVAILABLE_COINS
 from models.trigger import Trigger
 from models.user import User
 
@@ -39,7 +38,7 @@ async def seed() -> None:
         if trigger_exists.scalar_one_or_none() is None:
             db.add(
                 Trigger(
-                    user_id=user.id,
+                    user_id=cast(UUID, cast(Any, user.id)),
                     topic="btc",
                     threshold_value=100000.0,
                     threshold_direction="above",

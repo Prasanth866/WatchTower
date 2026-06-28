@@ -26,7 +26,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
     """Lifespan context manager to handle startup and shutdown events."""
-    aredis=aioredis.from_url(settings.REDIS_URL,decode_responses=True)
+    aredis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     app_.state.manager = ConnectionManager(
         aredis,
         event_log_writer=None,
@@ -56,18 +56,33 @@ async def lifespan(app_: FastAPI):
         except asyncio.CancelledError:
             log.info("Background tasks cancelled gracefully")
         except aioredis.RedisError as re:
-            log.error("Redis error in background tasks",error=str(re))
+            log.error("Redis error in background tasks", error=str(re))
 
-    worker_task =asyncio.create_task(start_background_tasks())
+    worker_task = asyncio.create_task(start_background_tasks())
     yield
-    worker_task.cancel()
-    if hasattr(app_.state, 'manager'):
-        await app_.state.manager.shutdown()
 
-    if hasattr(app_.state, 'manager'):
-        await app_.state.manager.redis.aclose()
+    # ----------------------------------------------------------------
+    # Shutdown sequence — order matters:
+    # 1. Cancel worker_task and wait for it to finish completely so no
+    #    new side-effect tasks are spawned after we start draining.
+    # 2. Shutdown ConnectionManager (drains remaining background tasks).
+    # 3. Close Redis only after all tasks that may use it are done.
+    # 4. Dispose the DB engine last.
+    # ----------------------------------------------------------------
+    worker_task.cancel()
     await asyncio.gather(worker_task, return_exceptions=True)
+    log.info("Worker task stopped")
+
+    if hasattr(app_.state, "manager"):
+        await app_.state.manager.shutdown()
+        log.info("ConnectionManager shutdown complete")
+
+    if hasattr(app_.state, "manager"):
+        await app_.state.manager.redis.aclose()
+        log.info("Redis connection closed")
+
     await engine.dispose()
+    log.info("DB engine disposed")
 
 app = FastAPI(
     title="WatchTower",
@@ -86,4 +101,4 @@ app.add_middleware(
 )
 
 
-app.include_router(api_router,prefix="/api/v1")
+app.include_router(api_router, prefix="/api/v1")

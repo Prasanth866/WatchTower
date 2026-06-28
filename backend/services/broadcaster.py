@@ -21,9 +21,11 @@ class ConnectionManager:
         self._redis = redis
         self._event_log_writer = event_log_writer
         self._process_side_effects = process_side_effects
-        self._connection:dict[str,dict[WebSocket,str]] = {}
+        self._connection: dict[str, dict[WebSocket, str]] = {}
+        self._conn_lock = asyncio.Lock()  # Guards _connection dict for all mutations/iterations
         self._listen_task: asyncio.Task | None = None
         self._background_tasks: set[asyncio.Task] = set()
+        self._bg_tasks_lock = asyncio.Lock()  # Guards _background_tasks set
         self._side_effect_limit = max(1, int(getattr(setting, "SIDE_EFFECT_CONCURRENCY", 16)))
         self._side_effect_semaphore = asyncio.Semaphore(self._side_effect_limit)
         self._send_timeout_seconds = float(getattr(setting, "WEBSOCKET_SEND_TIMEOUT_SECONDS", 2.0))
@@ -37,7 +39,8 @@ class ConnectionManager:
     def event_log_writer(self) -> Any | None:
         return self._event_log_writer
 
-    async def _safe_await(self, value):
+    @staticmethod
+    async def _safe_await(value):
         if inspect.isawaitable(value):
             return await value
         return value
@@ -53,9 +56,13 @@ class ConnectionManager:
                 await self._listen_task
             self._listen_task = None
 
-        if self._background_tasks:
+        # Drain background side-effect tasks before closing resources
+        async with self._bg_tasks_lock:
+            pending_tasks = list(self._background_tasks)
+
+        if pending_tasks:
             done, pending = await asyncio.wait(
-                list(self._background_tasks),
+                pending_tasks,
                 timeout=self._shutdown_drain_seconds,
             )
             if pending:
@@ -64,16 +71,27 @@ class ConnectionManager:
                 await asyncio.gather(*list(pending), return_exceptions=True)
             if done:
                 await asyncio.gather(*list(done), return_exceptions=True)
-            self._background_tasks.clear()
 
+            async with self._bg_tasks_lock:
+                self._background_tasks.clear()
 
+        # Clean up Redis connection tracking for all remaining sockets
         if hasattr(self._redis, "hincrby"):
-            for topic, connections in list(self._connection.items()):
-                for ws, user_id in list(connections.items()):
+            async with self._conn_lock:
+                snapshot = {
+                    topic: dict(conns)
+                    for topic, conns in self._connection.items()
+                }
+            for topic, connections in snapshot.items():
+                for ws, user_id in connections.items():
                     try:
-                        val = await self._safe_await(self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1))
+                        val = await self._safe_await(
+                            self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1)
+                        )
                         if val <= 0:
-                            await self._safe_await(self._redis.hdel(f"watchtower:user:{user_id}:topics", topic))
+                            await self._safe_await(
+                                self._redis.hdel(f"watchtower:user:{user_id}:topics", topic)
+                            )
                     except Exception:
                         pass
 
@@ -91,8 +109,19 @@ class ConnectionManager:
         }
 
     def _track_background_task(self, task: asyncio.Task) -> None:
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+        # Callback runs from the event loop thread — safe to access the set directly,
+        # but we schedule a coroutine to add under lock to keep things consistent.
+        async def _add():
+            async with self._bg_tasks_lock:
+                self._background_tasks.add(task)
+
+        async def _discard(t: asyncio.Task):
+            async with self._bg_tasks_lock:
+                self._background_tasks.discard(t)
+
+        # Schedule the add immediately; the discard is added as a done_callback.
+        asyncio.ensure_future(_add())
+        task.add_done_callback(lambda t: asyncio.ensure_future(_discard(t)))
 
     async def _process_side_effects_async(self, event: Event) -> None:
         try:
@@ -105,9 +134,10 @@ class ConnectionManager:
     async def _send_with_timeout(self, ws: WebSocket, payload: dict) -> None:
         await asyncio.wait_for(ws.send_json(payload), timeout=self._send_timeout_seconds)
 
-    async def subscribe(self,websocket:WebSocket,topic:str,user_id:str):
-        self._connection.setdefault(topic,{})[websocket] = user_id
-        log.info("User subscribed",user_id=user_id,topic=topic)
+    async def subscribe(self, websocket: WebSocket, topic: str, user_id: str):
+        async with self._conn_lock:
+            self._connection.setdefault(topic, {})[websocket] = user_id
+        log.info("User subscribed", user_id=user_id, topic=topic)
         if hasattr(self._redis, "hincrby"):
             try:
                 await self._safe_await(self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, 1))
@@ -115,44 +145,55 @@ class ConnectionManager:
             except Exception as e:
                 log.error("Failed to track connection in Redis", error=str(e))
 
-    async def disconnect_socket(self,websocket:WebSocket,topic:str):
-        topic_connections = self._connection.get(topic,{})
-        user_id = topic_connections.pop(websocket,None)
+    async def disconnect_socket(self, websocket: WebSocket, topic: str):
+        async with self._conn_lock:
+            topic_connections = self._connection.get(topic, {})
+            user_id = topic_connections.pop(websocket, None)
+            if not topic_connections:
+                self._connection.pop(topic, None)
+
         if user_id:
-            log.info("User unsubscribed",user_id=user_id,topic=topic)
+            log.info("User unsubscribed", user_id=user_id, topic=topic)
             if hasattr(self._redis, "hincrby"):
                 try:
-                    val = await self._safe_await(self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1))
+                    val = await self._safe_await(
+                        self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1)
+                    )
                     if val <= 0:
-                        await self._safe_await(self._redis.hdel(f"watchtower:user:{user_id}:topics", topic))
+                        await self._safe_await(
+                            self._redis.hdel(f"watchtower:user:{user_id}:topics", topic)
+                        )
                 except Exception as e:
                     log.error("Failed to untrack connection in Redis", error=str(e))
-        if not topic_connections:
-            self._connection.pop(topic,None)
 
-    async def disconnect_user_from_topic(self,user_id:str,topic:str):
-        topic_connections = self._connection.get(topic,{})
-        ws_to_remove = [ws for ws,uid in topic_connections.items() if str(uid) == str(user_id)]
+    async def disconnect_user_from_topic(self, user_id: str, topic: str):
+        async with self._conn_lock:
+            topic_connections = self._connection.get(topic, {})
+            ws_to_remove = [ws for ws, uid in topic_connections.items() if str(uid) == str(user_id)]
+
         for ws in ws_to_remove:
             try:
                 if ws.client_state == WebSocketState.CONNECTED:
                     await ws.close(code=status.WS_1000_NORMAL_CLOSURE)
-                    log.info("Closed websocket connection",user_id=user_id,topic=topic)
+                    log.info("Closed websocket connection", user_id=user_id, topic=topic)
             except Exception as e:
-                log.error("Error closing websocket",error=str(e))
+                log.error("Error closing websocket", error=str(e))
             finally:
                 await self.disconnect_socket(ws, topic)
 
     async def is_user_connected(self, user_id: str, topic: str) -> bool:
         """Return True when the user has at least one live socket on topic or its parent keys."""
         keys = self._topic_keys(topic)
-        for key in keys:
-            topic_connections = self._connection.get(key, {})
-            if any(str(uid) == str(user_id) for uid in topic_connections.values()):
-                return True
+        async with self._conn_lock:
+            for key in keys:
+                topic_connections = self._connection.get(key, {})
+                if any(str(uid) == str(user_id) for uid in topic_connections.values()):
+                    return True
         if hasattr(self._redis, "hgetall"):
             try:
-                user_topics = await self._safe_await(self._redis.hgetall(f"watchtower:user:{user_id}:topics"))
+                user_topics = await self._safe_await(
+                    self._redis.hgetall(f"watchtower:user:{user_id}:topics")
+                )
                 for k in keys:
                     if user_topics.get(k):
                         try:
@@ -169,8 +210,9 @@ class ConnectionManager:
         keys = self._topic_keys(topic)
         sent = False
         for key in keys:
-            topic_connections = self._connection.get(key, {})
-            for ws, uid in list(topic_connections.items()):
+            async with self._conn_lock:
+                topic_connections = dict(self._connection.get(key, {}))
+            for ws, uid in topic_connections.items():
                 if str(uid) == str(user_id):
                     try:
                         await self._send_with_timeout(ws, alert_payload)
@@ -182,10 +224,11 @@ class ConnectionManager:
 
     def get_connection_counts(self) -> dict[str, int]:
         """Return current websocket connection counts grouped by topic."""
+        # Snapshot without lock — acceptable for metrics (eventual consistency)
         return {topic: len(connections) for topic, connections in self._connection.items()}
 
-    async def publish(self,topic:str,event:Event):
-        await self._safe_await(self._redis.publish(topic,event.model_dump_json()))
+    async def publish(self, topic: str, event: Event):
+        await self._safe_await(self._redis.publish(topic, event.model_dump_json()))
         await self._safe_await(self._redis.set(f"price:{topic}", str(event.value)))
 
     @staticmethod
@@ -195,7 +238,7 @@ class ConnectionManager:
         if len(parts) > 1:
             for i in range(len(parts) - 1, 0, -1):
                 keys.append(".".join(parts[:i]))
-        root = re.split(r"[:.]", topic, maxsplit=1)[0]
+        root = re.split(r"[:.>]", topic, maxsplit=1)[0]
         if root not in keys:
             keys.append(root)
         return keys
@@ -244,40 +287,49 @@ class ConnectionManager:
                     except Exception:
                         pass
 
-    async def _broadcast(self,topic:str,event:Event):
-        target_connections: dict[WebSocket, str] = {}
+    async def _broadcast(self, topic: str, event: Event):
         keys = self._topic_keys(topic)
-        for key in keys:
-            target_connections.update(self._connection.get(key, {}))
+
+        # Snapshot connections under lock to avoid dict mutation during send
+        async with self._conn_lock:
+            target_connections: dict[WebSocket, str] = {}
+            for key in keys:
+                target_connections.update(self._connection.get(key, {}))
 
         if not target_connections:
-            log.debug("No active connections for topic",topic=topic)
+            log.debug("No active connections for topic", topic=topic)
             return
-        payload = event.model_dump(mode="json")
 
-        websockets= list(target_connections.keys())
-        tasks=[self._send_with_timeout(ws, payload) for ws in websockets]
-        
+        payload = event.model_dump(mode="json")
+        websockets = list(target_connections.keys())
+        tasks = [self._send_with_timeout(ws, payload) for ws in websockets]
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for i ,res in enumerate(results):
+        for i, res in enumerate(results):
             if isinstance(res, Exception):
-                ws=websockets[i]
-                log.error("Broadcast failed for socket",error=str(ws),topic=event.topic)
+                ws = websockets[i]
+                log.error("Broadcast failed for socket", error=str(res), topic=event.topic)
                 for key in keys:
                     await self.disconnect_socket(ws, key)
 
     async def cleanup_dead_connections(self):
-        for topic in list(self._connection.keys()):
-            topic_connections = self._connection.get(topic,{})
+        # Snapshot topics under lock; then check/clean each ws without holding the lock
+        async with self._conn_lock:
+            topics_snapshot = list(self._connection.keys())
+
+        for topic in topics_snapshot:
+            async with self._conn_lock:
+                ws_snapshot = list(self._connection.get(topic, {}).keys())
+
             dead = []
-            for ws in list(topic_connections.keys()):
+            for ws in ws_snapshot:
                 if ws.client_state != WebSocketState.CONNECTED:
                     dead.append(ws)
                     continue
-
                 try:
-                    await ws.send_json({"type":"ping"})
+                    await ws.send_json({"type": "ping"})
                 except Exception:
                     dead.append(ws)
+
             for ws in dead:
                 await self.disconnect_socket(ws, topic)

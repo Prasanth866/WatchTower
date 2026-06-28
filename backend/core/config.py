@@ -1,6 +1,5 @@
 """Core configuration settings for the application."""
 import json
-import os
 from functools import lru_cache
 from pathlib import Path
 from pydantic import field_validator, Field, AliasChoices

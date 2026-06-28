@@ -15,10 +15,12 @@ class EmailWorker:
         self.interval = interval
         self.status_registry = status_registry
         self.worker_name = "email:queue"
-        if self.status_registry:
-            self.status_registry.mark_starting(self.worker_name, "worker initialized")
 
     async def run(self) -> None:
+        # Async initialisation — mark_starting must be awaited
+        if self.status_registry:
+            await self.status_registry.mark_starting(self.worker_name, "worker initialized")
+
         log.info("Email worker started", interval=self.interval)
         cycle = 0
         while True:
@@ -28,19 +30,19 @@ class EmailWorker:
                     if sent_count:
                         log.info("Queued emails sent", count=sent_count)
                 if self.status_registry:
-                    self.status_registry.mark_healthy(self.worker_name)
+                    await self.status_registry.mark_healthy(self.worker_name)
                 if cycle % 120 == 0:
                     await self._cleanup_expired_tokens()
                 cycle += 1
             except asyncio.CancelledError:
                 log.info("Email worker cancelled")
                 if self.status_registry:
-                    self.status_registry.mark_stopped(self.worker_name, "worker cancelled")
+                    await self.status_registry.mark_stopped(self.worker_name, "worker cancelled")
                 break
             except Exception as exc:
                 log.error("Email worker error", error=str(exc))
                 if self.status_registry:
-                    self.status_registry.mark_degraded(self.worker_name, str(exc))
+                    await self.status_registry.mark_degraded(self.worker_name, str(exc))
             await asyncio.sleep(self.interval)
 
     async def _cleanup_expired_tokens(self) -> None:
