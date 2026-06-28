@@ -8,7 +8,6 @@ from httpx import ASGITransport, AsyncClient
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/watchtower_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("SECRET_KEY", "test_secret_key_for_pytest_1234567890")
-os.environ.setdefault("BASKETBALL_API_KEY", "test_key")
 
 
 @pytest_asyncio.fixture

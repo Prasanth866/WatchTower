@@ -42,11 +42,4 @@ async def get_current_user(
     return result
 
 
-async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency that ensures the current user has admin privileges."""
-    if not getattr(current_user, "is_admin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    return current_user
+

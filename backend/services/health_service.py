@@ -4,7 +4,7 @@ from redis.asyncio import Redis
 from core.database import engine
 
 
-async def get_health_status(redis_client: Redis, worker_status=None) -> dict:
+async def get_health_status(redis_client: Redis, worker_status=None, manager=None) -> dict:
     status = {"api": "ok"}
 
     try:
@@ -22,5 +22,8 @@ async def get_health_status(redis_client: Redis, worker_status=None) -> dict:
 
     if worker_status is not None:
         status["workers"] = worker_status.snapshot()
+
+    if manager is not None and hasattr(manager, "side_effect_runtime"):
+        status["side_effects"] = manager.side_effect_runtime()
 
     return status

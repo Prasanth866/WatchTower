@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SQLALCHEMY_ECHO: bool = False
-    BASKETBALL_API_KEY: str
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -24,6 +23,13 @@ class Settings(BaseSettings):
     ENABLE_WORKERS: bool = True
     SIDE_EFFECT_CONCURRENCY: int = 16
     WEBSOCKET_SEND_TIMEOUT_SECONDS: float = 2.0
+    SIDE_EFFECT_SHUTDOWN_DRAIN_SECONDS: float = 10.0
+    EVENT_LOG_BATCH_SIZE: int = 250
+    EVENT_LOG_FLUSH_INTERVAL_SECONDS: float = 5.0
+    EVENT_LOG_QUEUE_MAXSIZE: int = 10000
+    WORKER_CIRCUIT_FAILURE_THRESHOLD: int = 20
+    WORKER_CIRCUIT_OPEN_SECONDS: int = 300
+    WORKER_MAX_BACKOFF_SECONDS: int = 300
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

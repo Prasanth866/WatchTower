@@ -10,4 +10,5 @@ router = APIRouter()
 async def health_check(request: Request, redis_client: Redis = Depends(get_redis_client)):
     """Endpoint to check the health status of the application and its dependencies."""
     worker_status = getattr(request.app.state, "worker_status", None)
-    return await get_health_status(redis_client, worker_status)
+    manager = getattr(request.app.state, "manager", None)
+    return await get_health_status(redis_client, worker_status, manager)

@@ -54,18 +54,22 @@ async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
         select(EmailQueue).where(EmailQueue.sent.is_(False)).order_by(EmailQueue.created_at.asc()).limit(batch_size)
     )
     pending = result.scalars().all()
-    sent_count = 0
+    if not pending:
+        return 0
 
-    for email in pending:
+    async def send_one(email: EmailQueue) -> bool:
         try:
             await asyncio.to_thread(_send_email, email.to_email, email.subject, email.body)
             email.sent = True
             email.sent_at = datetime.now(timezone.utc)
-            sent_count += 1
+            return True
         except Exception as exc:
             log.error("Email send failed", to_email=email.to_email, error=str(exc))
+            return False
 
-    if pending:
-        await db.commit()
+    results = await asyncio.gather(*(send_one(email) for email in pending), return_exceptions=True)
+    sent_count = sum(1 for res in results if res is True)
+
+    await db.commit()
 
     return sent_count

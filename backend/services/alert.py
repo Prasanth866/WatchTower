@@ -55,8 +55,19 @@ async def process_event_alerts(db: AsyncSession, manager, event: Event, *, auto_
             continue
 
         user_id = str(trigger.user_id)
-        if manager.is_user_connected(user_id, event.topic):
+        if await manager.is_user_connected(user_id, event.topic):
             log.info("onscreen_alert_ready", user_id=user_id, topic=event.topic)
+            alert_payload = {
+                "type": "alert",
+                "trigger_id": str(trigger.id),
+                "topic": event.topic,
+                "value": event.value,
+                "unit": event.unit,
+                "threshold_direction": trigger.threshold_direction,
+                "threshold_value": trigger.threshold_value,
+                "timestamp": event.timestamp.isoformat(),
+            }
+            await manager.send_user_alert(user_id, event.topic, alert_payload)
         else:
             user = await db.get(User, UUID(user_id))
             if user and getattr(user, "email", None) and getattr(user, "email_notifications", True):

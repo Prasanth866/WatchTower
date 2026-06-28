@@ -10,16 +10,20 @@ class CryptoWorker(AbstractWorker):
     def __init__(
         self,
         manager: ConnectionManager,
-        topic: str,
         interval: int = 15,
-        symbol: str = "BTC-USDT",
-        coin_name: str = "bitcoin",
         status_registry: WorkerStatusRegistry | None = None,
     ):
-        super().__init__(manager, topic, interval, status_registry=status_registry)
-        self.symbol = symbol
-        self.coin_name = coin_name
-        self.url = "https://api.kucoin.com/api/v1/market/orderbook/level1"
+        super().__init__(manager, topic="crypto:all", interval=interval, status_registry=status_registry)
+        self.coin_mapping = {
+            "bitcoin": ("crypto:btc", "USD"),
+            "ethereum": ("crypto:eth", "USD"),
+            "solana": ("crypto:sol", "USD"),
+            "cardano": ("crypto:ada", "USD"),
+            "ripple": ("crypto:xrp", "USD"),
+            "dogecoin": ("crypto:doge", "USD"),
+            "polkadot": ("crypto:dot", "USD"),
+        }
+        self.url = "https://api.coingecko.com/api/v3/simple/price"
         headers = {"User-Agent": "CryptoTracker/1.0 (FastAPI Worker)"}
         self.client = httpx.AsyncClient(
             timeout=15, 
@@ -28,9 +32,11 @@ class CryptoWorker(AbstractWorker):
             transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0", retries=3)
         )
     
-    async def fetch(self)->Event:
+    async def fetch(self) -> list[Event]:
+        coin_ids = ",".join(self.coin_mapping.keys())
         params = {
-            "symbol": self.symbol
+            "ids": coin_ids,
+            "vs_currencies": "usd"
         }
         try:
             response = await self.client.get(
@@ -43,17 +49,29 @@ class CryptoWorker(AbstractWorker):
             raise Exception("Critical: Persistent DNS or Network Connection Failure")
         except httpx.HTTPError as e:
             raise Exception(f"Network error: {type(e).__name__} - {str(e)}")
-        price = data.get('data', {}).get('price')
-        if price is None:
-            raise ValueError("Could not parse price from KuCoin response")
-        return Event(topic=self.topic,
+
+        events = []
+        for coin_id, (topic, unit) in self.coin_mapping.items():
+            coin_data = data.get(coin_id)
+            if coin_data is None:
+                continue
+            price = coin_data.get("usd")
+            if price is None:
+                continue
+            
+            events.append(
+                Event(
+                    topic=topic,
                     value=float(price),
-                    unit='USDT',
+                    unit=unit,
                     metadata={
-                        "coin": self.coin_name,
-                        "source":"kucoin",
-                        "timestamp":datetime.now(timezone.utc).isoformat()
+                        "coin": coin_id,
+                        "source": "coingecko",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
                     }
                 )
+            )
+        return events
+
     async def close(self):
         await self.client.aclose()

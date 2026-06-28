@@ -27,8 +27,8 @@ engine = create_async_engine(
     DATABASE_URL,
     echo=_env_bool("SQLALCHEMY_ECHO", default=False),
     future=True,
-    max_overflow=0,
-    pool_size=5,
+    max_overflow=10,
+    pool_size=20,
 )
 
 async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)

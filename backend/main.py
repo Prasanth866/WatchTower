@@ -9,7 +9,6 @@ import redis.asyncio as aioredis
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-import models.event_log  # noqa: F401
 from core.logger import setup_logging, get_logger
 from core.exception import register_exception_handlers
 from core.rate_limiter import limiter
@@ -19,6 +18,7 @@ from core.config import get_settings
 from core.database import engine
 from workers.runner import start_all_workers
 from services.broadcaster import ConnectionManager
+from services.event_log_writer import EventLogWriter
 
 setup_logging()
 log = get_logger(__name__)
@@ -28,7 +28,16 @@ settings = get_settings()
 async def lifespan(app_: FastAPI):
     """Lifespan context manager to handle startup and shutdown events."""
     aredis=aioredis.from_url(settings.REDIS_URL,decode_responses=True)
-    app_.state.manager = ConnectionManager(aredis)
+    if settings.ENABLE_WORKERS:
+        app_.state.event_log_writer = EventLogWriter()
+        await app_.state.event_log_writer.startup()
+    else:
+        app_.state.event_log_writer = None
+    app_.state.manager = ConnectionManager(
+        aredis,
+        event_log_writer=app_.state.event_log_writer,
+        process_side_effects=settings.ENABLE_WORKERS
+    )
     app_.state.worker_status = WorkerStatusRegistry()
     app_.state.worker_status.set_enabled(settings.ENABLE_WORKERS)
 
@@ -60,6 +69,9 @@ async def lifespan(app_: FastAPI):
     worker_task.cancel()
     if hasattr(app_.state, 'manager'):
         await app_.state.manager.shutdown()
+    if getattr(app_.state, 'event_log_writer', None) is not None:
+        await app_.state.event_log_writer.shutdown()
+    if hasattr(app_.state, 'manager'):
         await app_.state.manager.redis.aclose()
     await asyncio.gather(worker_task, return_exceptions=True)
     await engine.dispose()

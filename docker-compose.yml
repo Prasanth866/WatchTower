@@ -1,15 +1,30 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: watchtower_postgres
+    profiles:
+      - local-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_me_in_prod}
+      - POSTGRES_DB=${POSTGRES_DB:-mydb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mydb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   fastapi:
     build: ./backend
     container_name: fastapi_app
     restart: unless-stopped
     ports:
       - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -20,7 +35,8 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES
       - ALGORITHM
       - CORS_ALLOWED_ORIGINS
-      - ENABLE_WORKERS
+      - ENABLE_WORKERS=${ENABLE_WORKERS:-true}
+      - SKIP_MIGRATIONS=${SKIP_MIGRATIONS:-false}
     command: /backend/scripts/entrypoint.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -28,54 +44,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  frontend:
-    build:
-      context: ./frontend/my-react-app
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
-    container_name: watchtower_frontend
-    restart: unless-stopped
-    depends_on:
-      fastapi:
-        condition: service_healthy
-    ports:
-      - "3000:80"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/healthz"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  postgres:
-    image: postgres:15
-    container_name: postgres_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_prod}
-      POSTGRES_DB: ${POSTGRES_DB:-mydb}
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mydb}"]
-      interval: 5s
-      retries: 5
-      timeout: 5s
-
-  redis:
-    image: redis:7
-    container_name: redis_cache
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      retries: 5
-      timeout: 3s
 
 volumes:
   postgres_data:

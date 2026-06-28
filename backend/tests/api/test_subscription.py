@@ -50,7 +50,7 @@ async def test_list_subscriptions_returns_current_user_topics(monkeypatch) -> No
 
 	async def _fake_list_subscriptions(_db, current_user_id):
 		assert current_user_id == user_id
-		return ["crypto:btc", "basketball:nba"]
+		return ["crypto:btc", "crypto:eth"]
 
 	monkeypatch.setattr(subscription_module, "list_subscriptions_for_user", _fake_list_subscriptions)
 
@@ -58,7 +58,7 @@ async def test_list_subscriptions_returns_current_user_topics(monkeypatch) -> No
 		response = await client.get("/api/v1/subscriptions/")
 
 	assert response.status_code == status.HTTP_200_OK
-	assert response.json() == ["crypto:btc", "basketball:nba"]
+	assert response.json() == ["crypto:btc", "crypto:eth"]
 
 
 @pytest.mark.asyncio

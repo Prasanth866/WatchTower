@@ -14,7 +14,10 @@ class _FakeResponse:
         return None
 
     def json(self):
-        return {"data": {"price": "3210.55"}}
+        return {
+            "bitcoin": {"usd": 61250.5},
+            "ethereum": {"usd": 3410.2}
+        }
 
 
 class _FakeClient:
@@ -26,21 +29,27 @@ class _FakeClient:
 
 
 @pytest.mark.asyncio
-async def test_crypto_worker_uses_configured_symbol_and_coin() -> None:
+async def test_crypto_worker_fetches_multiple_coins_from_coingecko() -> None:
     worker = CryptoWorker(
         manager=_DummyRedis(),
-        topic="crypto:ethereum",
-        symbol="ETH-USDT",
-        coin_name="ethereum",
+        interval=15,
     )
     worker.client = _FakeClient()
 
-    event = await worker.fetch()
+    events = await worker.fetch()
 
-    assert event.topic == "crypto:ethereum"
-    assert event.value == 3210.55
-    assert event.metadata["coin"] == "ethereum"
+    assert len(events) == 2
+    btc_event = next(e for e in events if e.topic == "crypto:btc")
+    assert btc_event.value == 61250.5
+    assert btc_event.metadata["coin"] == "bitcoin"
+    assert btc_event.metadata["source"] == "coingecko"
+
+    eth_event = next(e for e in events if e.topic == "crypto:eth")
+    assert eth_event.value == 3410.2
+    assert eth_event.metadata["coin"] == "ethereum"
 
 
-def test_ethereum_topic_is_available_for_subscriptions_and_triggers() -> None:
-    assert "crypto:ethereum" in VALID_TOPICS
+def test_crypto_topics_are_available_in_valid_topics() -> None:
+    assert "crypto:btc" in VALID_TOPICS
+    assert "crypto:eth" in VALID_TOPICS
+    assert "wiki:recent_changes" not in VALID_TOPICS

@@ -11,9 +11,13 @@ class TopicInfo(BaseModel):
 
 
 AVAILABLE_TOPICS: list[TopicInfo] = [
-    TopicInfo(name="crypto:btc", description="Live BTC prices", unit="USDT", interval_seconds=15),
-    TopicInfo(name="crypto:ethereum", description="Live ETH prices", unit="USDT", interval_seconds=15),
-    TopicInfo(name="basketball:nba", description="Live NBA scores", unit="Points", interval_seconds=60),
+    TopicInfo(name="crypto:btc", description="Live Bitcoin prices", unit="USD", interval_seconds=15),
+    TopicInfo(name="crypto:eth", description="Live Ethereum prices", unit="USD", interval_seconds=15),
+    TopicInfo(name="crypto:sol", description="Live Solana prices", unit="USD", interval_seconds=15),
+    TopicInfo(name="crypto:ada", description="Live Cardano prices", unit="USD", interval_seconds=15),
+    TopicInfo(name="crypto:xrp", description="Live Ripple prices", unit="USD", interval_seconds=15),
+    TopicInfo(name="crypto:doge", description="Live Dogecoin prices", unit="USD", interval_seconds=15),
+    TopicInfo(name="crypto:dot", description="Live Polkadot prices", unit="USD", interval_seconds=15),
 ]
 
 VALID_TOPICS = {topic_info.name for topic_info in AVAILABLE_TOPICS}

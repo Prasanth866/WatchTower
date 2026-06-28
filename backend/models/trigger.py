@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import DateTime, String ,Float ,Boolean ,ForeignKey ,Integer, func
+from sqlalchemy import DateTime, String ,Float ,Boolean ,ForeignKey ,Integer, Index, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 class Trigger(Base):
     """Model representing a user's trigger for a specific topic and threshold."""
     __tablename__ = "triggers"
+    __table_args__ = (
+        Index("idx_trigger_topic_active", "topic", "is_active"),
+    )
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,

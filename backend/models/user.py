@@ -24,11 +24,6 @@ class User(Base):
         String,
         nullable=False
     )
-    is_admin: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        nullable=False
-    )
     email_notifications: Mapped[bool] = mapped_column(
         Boolean,
         default=True,

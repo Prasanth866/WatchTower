@@ -21,7 +21,6 @@ async def seed() -> None:
             user = User(
                 email=email,
                 password_hash=get_password_hash("testpass123A!"),
-                is_admin=False,
             )
             db.add(user)
             await db.flush()

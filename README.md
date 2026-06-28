@@ -1,6 +1,6 @@
 # WatchTower
 
-WatchTower is a real-time event monitoring platform that streams market and sports data to clients over WebSockets, supports user subscriptions, and delivers threshold-based alerts.
+WatchTower is a real-time event monitoring platform that streams live cryptocurrency market data to clients over WebSockets, supports user subscriptions, and delivers threshold-based alerts.
 
 ## Features
 
@@ -8,8 +8,7 @@ WatchTower is a real-time event monitoring platform that streams market and spor
 - Topic subscriptions and trigger-based alerting
 - Redis pub/sub fanout to WebSocket clients
 - Event persistence for historical charting
-- Background workers for crypto, basketball, and queued email delivery
-- Admin APIs for user and system visibility
+- Background workers for CoinGecko crypto feeds and queued email delivery
 
 ## Tech Stack
 
@@ -60,7 +59,7 @@ uv run pytest -q
 
 ## Event Pipeline
 
-1. Workers fetch external data and publish events to Redis.
+1. Workers fetch external data (crypto prices via CoinGecko) and publish events to Redis.
 2. Connection manager listens to Redis and broadcasts to WebSocket clients.
 3. Event side-effects are processed asynchronously: event logs persisted and alerts evaluated.
 4. Email worker sends queued notifications.
