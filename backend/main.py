@@ -18,7 +18,6 @@ from core.config import get_settings
 from core.database import engine
 from workers.runner import start_all_workers
 from services.broadcaster import ConnectionManager
-from services.event_log_writer import EventLogWriter
 
 setup_logging()
 log = get_logger(__name__)
@@ -28,14 +27,9 @@ settings = get_settings()
 async def lifespan(app_: FastAPI):
     """Lifespan context manager to handle startup and shutdown events."""
     aredis=aioredis.from_url(settings.REDIS_URL,decode_responses=True)
-    if settings.ENABLE_WORKERS:
-        app_.state.event_log_writer = EventLogWriter()
-        await app_.state.event_log_writer.startup()
-    else:
-        app_.state.event_log_writer = None
     app_.state.manager = ConnectionManager(
         aredis,
-        event_log_writer=app_.state.event_log_writer,
+        event_log_writer=None,
         process_side_effects=settings.ENABLE_WORKERS
     )
     app_.state.worker_status = WorkerStatusRegistry()
@@ -69,8 +63,7 @@ async def lifespan(app_: FastAPI):
     worker_task.cancel()
     if hasattr(app_.state, 'manager'):
         await app_.state.manager.shutdown()
-    if getattr(app_.state, 'event_log_writer', None) is not None:
-        await app_.state.event_log_writer.shutdown()
+
     if hasattr(app_.state, 'manager'):
         await app_.state.manager.redis.aclose()
     await asyncio.gather(worker_task, return_exceptions=True)

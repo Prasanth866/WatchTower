@@ -1,8 +1,14 @@
 """Core configuration settings for the application."""
 import json
+import os
 from functools import lru_cache
-from pydantic import field_validator
-from pydantic_settings import BaseSettings,SettingsConfigDict
+from pathlib import Path
+from pydantic import field_validator, Field, AliasChoices
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = BASE_DIR / ".env"
+
 
 class Settings(BaseSettings):
     """Application configuration settings."""
@@ -12,11 +18,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SQLALCHEMY_ECHO: bool = False
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = ""
+    RESEND_API_KEY: str = Field(default="", validation_alias=AliasChoices("RESEND_API_KEY", "RESEND_APT_KEY"))
+    RESEND_FROM_EMAIL: str = Field(default="", validation_alias=AliasChoices("RESEND_FROM_EMAIL", "EMAIL_FROM", "SMTP_FROM"))
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ALLOWED_ORIGINS: str = "http://localhost:5173"
     RATE_LIMIT_STORAGE_URI: str = "memory://"
@@ -31,10 +34,11 @@ class Settings(BaseSettings):
     WORKER_CIRCUIT_OPEN_SECONDS: int = 300
     WORKER_MAX_BACKOFF_SECONDS: int = 300
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
     @field_validator("SECRET_KEY")
     @classmethod
     def check_secret_strength(cls, v: str) -> str:

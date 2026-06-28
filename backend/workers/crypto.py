@@ -13,15 +13,15 @@ class CryptoWorker(AbstractWorker):
         interval: int = 15,
         status_registry: WorkerStatusRegistry | None = None,
     ):
-        super().__init__(manager, topic="crypto:all", interval=interval, status_registry=status_registry)
+        super().__init__(manager, topic="all", interval=interval, status_registry=status_registry)
         self.coin_mapping = {
-            "bitcoin": ("crypto:btc", "USD"),
-            "ethereum": ("crypto:eth", "USD"),
-            "solana": ("crypto:sol", "USD"),
-            "cardano": ("crypto:ada", "USD"),
-            "ripple": ("crypto:xrp", "USD"),
-            "dogecoin": ("crypto:doge", "USD"),
-            "polkadot": ("crypto:dot", "USD"),
+            "bitcoin":  ("btc",  "USD"),
+            "ethereum": ("eth",  "USD"),
+            "solana":   ("sol",  "USD"),
+            "cardano":  ("ada",  "USD"),
+            "ripple":   ("xrp",  "USD"),
+            "dogecoin": ("doge", "USD"),
+            "polkadot": ("dot",  "USD"),
         }
         self.url = "https://api.coingecko.com/api/v3/simple/price"
         headers = {"User-Agent": "CryptoTracker/1.0 (FastAPI Worker)"}

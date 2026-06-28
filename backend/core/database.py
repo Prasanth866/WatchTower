@@ -1,18 +1,12 @@
 """Database setup and configuration using SQLAlchemy."""
-import os
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from core.database_url import to_asyncpg_database_url, to_sync_database_url
+from core.config import get_settings
 
+settings = get_settings()
 
-def _env_bool(name: str, default: bool = False) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+DATABASE_URL = settings.DATABASE_URL.strip()
 
 if not DATABASE_URL:
     raise ValueError(
@@ -25,7 +19,7 @@ CLEAN_DSN = to_sync_database_url(DATABASE_URL)
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=_env_bool("SQLALCHEMY_ECHO", default=False),
+    echo=settings.SQLALCHEMY_ECHO,
     future=True,
     max_overflow=10,
     pool_size=20,

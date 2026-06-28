@@ -1,6 +1,4 @@
 import pytest
-
-from core.topics import VALID_TOPICS
 from workers.crypto import CryptoWorker
 
 
@@ -39,17 +37,19 @@ async def test_crypto_worker_fetches_multiple_coins_from_coingecko() -> None:
     events = await worker.fetch()
 
     assert len(events) == 2
-    btc_event = next(e for e in events if e.topic == "crypto:btc")
+    btc_event = next(e for e in events if e.topic == "btc")
     assert btc_event.value == 61250.5
     assert btc_event.metadata["coin"] == "bitcoin"
     assert btc_event.metadata["source"] == "coingecko"
 
-    eth_event = next(e for e in events if e.topic == "crypto:eth")
+    eth_event = next(e for e in events if e.topic == "eth")
     assert eth_event.value == 3410.2
     assert eth_event.metadata["coin"] == "ethereum"
 
 
-def test_crypto_topics_are_available_in_valid_topics() -> None:
-    assert "crypto:btc" in VALID_TOPICS
-    assert "crypto:eth" in VALID_TOPICS
-    assert "wiki:recent_changes" not in VALID_TOPICS
+def test_coin_symbols_are_in_valid_coins() -> None:
+    from core.coins import VALID_COINS
+    assert "btc" in VALID_COINS
+    assert "eth" in VALID_COINS
+    assert "crypto:btc" not in VALID_COINS
+    assert "wiki:recent_changes" not in VALID_COINS

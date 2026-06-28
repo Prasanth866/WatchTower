@@ -90,4 +90,4 @@ async def update_notification_preferences(
     current_user.email_notifications = payload.email_notifications
     await db.commit()
     await db.refresh(current_user)
-    return NotificationPreferenceResponse(email_notifications=current_user.email_notifications)
+    return NotificationPreferenceResponse(email_notifications=payload.email_notifications)

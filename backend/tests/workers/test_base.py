@@ -18,12 +18,12 @@ class _DummyWorker(AbstractWorker):
 
 def test_trip_circuit_marks_worker_degraded_with_details() -> None:
     registry = WorkerStatusRegistry()
-    worker = _DummyWorker(_DummyManager(), topic="crypto:btc", status_registry=registry)
+    worker = _DummyWorker(_DummyManager(), topic="btc", status_registry=registry)
 
     worker._trip_circuit("provider unavailable")
 
     snapshot = registry.snapshot()
-    worker_state = snapshot["workers"]["crypto:btc"]
+    worker_state = snapshot["workers"]["btc"]
     assert worker.circuit_state == "open"
     assert worker_state["status"] == "degraded"
     assert worker_state["message"] == "circuit_open"
@@ -33,7 +33,7 @@ def test_trip_circuit_marks_worker_degraded_with_details() -> None:
 
 @pytest.mark.asyncio
 async def test_wait_for_open_circuit_transitions_to_half_open_after_timeout() -> None:
-    worker = _DummyWorker(_DummyManager(), topic="crypto:btc")
+    worker = _DummyWorker(_DummyManager(), topic="btc")
     worker.circuit_state = "open"
     worker._circuit_open_until = datetime.now(timezone.utc) - timedelta(seconds=1)
 

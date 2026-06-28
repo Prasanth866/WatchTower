@@ -3,14 +3,14 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.exception import BadRequestException, NotFoundException, UnauthorizedException
-from core.topics import VALID_TOPICS
+from core.coins import VALID_COINS
 from models.trigger import Trigger
 from schemas.trigger import TriggerCreate, TriggerUpdate
 
 
-def _validate_trigger_topic(topic: str) -> None:
-    if topic not in VALID_TOPICS:
-        raise BadRequestException(f"Invalid trigger topic '{topic}'")
+def _validate_trigger_coin(coin: str) -> None:
+    if coin not in VALID_COINS:
+        raise BadRequestException(f"Invalid coin '{coin}'. Valid coins: {sorted(VALID_COINS)}")
 
 
 def _validate_expires_at(expires_at: datetime | None) -> None:
@@ -29,7 +29,7 @@ async def list_triggers_for_user(db: AsyncSession, user_id: UUID) -> list[Trigge
     return list(result.scalars().all())
 
 async def create_trigger(db: AsyncSession, user_id: UUID, obj_in: TriggerCreate) -> Trigger:
-    _validate_trigger_topic(obj_in.topic)
+    _validate_trigger_coin(obj_in.topic)
     _validate_expires_at(obj_in.expires_at)
 
     db_obj = Trigger(
@@ -51,7 +51,7 @@ async def update_trigger(db: AsyncSession, user_id: UUID, trigger_id: UUID, obj_
         raise UnauthorizedException("Unauthorized")
     update_data = obj_in.model_dump(exclude_unset=True)
     if "topic" in update_data and update_data["topic"] is not None:
-        _validate_trigger_topic(update_data["topic"])
+        _validate_trigger_coin(update_data["topic"])
     if "expires_at" in update_data:
         _validate_expires_at(update_data["expires_at"])
     for field, value in update_data.items():

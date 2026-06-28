@@ -1,12 +1,13 @@
 import asyncio
 import re
+import inspect
 from typing import Any
 from contextlib import suppress
 from fastapi.websockets import WebSocketState
 from fastapi import WebSocket, status
 from redis.asyncio import Redis
 from schemas.event import Event
-from core.topics import AVAILABLE_TOPICS
+from core.coins import AVAILABLE_COINS
 from core.config import get_settings
 from core.logger import get_logger
 from services.event_processing_service import process_event_side_effects
@@ -36,6 +37,11 @@ class ConnectionManager:
     def event_log_writer(self) -> Any | None:
         return self._event_log_writer
 
+    async def _safe_await(self, value):
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
     async def startup(self):
         self._listen_task = asyncio.create_task(self._listen())
         log.info("ConnectionManager started")
@@ -60,14 +66,14 @@ class ConnectionManager:
                 await asyncio.gather(*list(done), return_exceptions=True)
             self._background_tasks.clear()
 
-        # Clean up active connections from Redis on graceful shutdown
+
         if hasattr(self._redis, "hincrby"):
             for topic, connections in list(self._connection.items()):
                 for ws, user_id in list(connections.items()):
                     try:
-                        val = await self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1)
+                        val = await self._safe_await(self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1))
                         if val <= 0:
-                            await self._redis.hdel(f"watchtower:user:{user_id}:topics", topic)
+                            await self._safe_await(self._redis.hdel(f"watchtower:user:{user_id}:topics", topic))
                     except Exception:
                         pass
 
@@ -104,8 +110,8 @@ class ConnectionManager:
         log.info("User subscribed",user_id=user_id,topic=topic)
         if hasattr(self._redis, "hincrby"):
             try:
-                await self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, 1)
-                await self._redis.expire(f"watchtower:user:{user_id}:topics", 86400)
+                await self._safe_await(self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, 1))
+                await self._safe_await(self._redis.expire(f"watchtower:user:{user_id}:topics", 86400))
             except Exception as e:
                 log.error("Failed to track connection in Redis", error=str(e))
 
@@ -116,9 +122,9 @@ class ConnectionManager:
             log.info("User unsubscribed",user_id=user_id,topic=topic)
             if hasattr(self._redis, "hincrby"):
                 try:
-                    val = await self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1)
+                    val = await self._safe_await(self._redis.hincrby(f"watchtower:user:{user_id}:topics", topic, -1))
                     if val <= 0:
-                        await self._redis.hdel(f"watchtower:user:{user_id}:topics", topic)
+                        await self._safe_await(self._redis.hdel(f"watchtower:user:{user_id}:topics", topic))
                 except Exception as e:
                     log.error("Failed to untrack connection in Redis", error=str(e))
         if not topic_connections:
@@ -146,7 +152,7 @@ class ConnectionManager:
                 return True
         if hasattr(self._redis, "hgetall"):
             try:
-                user_topics = await self._redis.hgetall(f"watchtower:user:{user_id}:topics")
+                user_topics = await self._safe_await(self._redis.hgetall(f"watchtower:user:{user_id}:topics"))
                 for k in keys:
                     if user_topics.get(k):
                         try:
@@ -179,7 +185,8 @@ class ConnectionManager:
         return {topic: len(connections) for topic, connections in self._connection.items()}
 
     async def publish(self,topic:str,event:Event):
-        await self._redis.publish(topic,event.model_dump_json())
+        await self._safe_await(self._redis.publish(topic,event.model_dump_json()))
+        await self._safe_await(self._redis.set(f"price:{topic}", str(event.value)))
 
     @staticmethod
     def _topic_keys(topic: str) -> list[str]:
@@ -194,8 +201,8 @@ class ConnectionManager:
         return keys
 
     async def _listen(self):
-        channels = [topic.name for topic in AVAILABLE_TOPICS]
-        patterns = [f"{topic.name}.*" for topic in AVAILABLE_TOPICS]
+        channels = [coin.symbol for coin in AVAILABLE_COINS]
+        patterns = [f"{coin.symbol}.*" for coin in AVAILABLE_COINS]
         backoff = 1.0
         max_backoff = 60.0
 
@@ -203,8 +210,8 @@ class ConnectionManager:
             pubsub = None
             try:
                 pubsub = self._redis.pubsub()
-                await pubsub.subscribe(*channels)
-                await pubsub.psubscribe(*patterns)
+                await self._safe_await(pubsub.subscribe(*channels))
+                await self._safe_await(pubsub.psubscribe(*patterns))
                 log.info("Subscribed to Redis channels and patterns", channels=channels, patterns=patterns)
                 backoff = 1.0
                 async for message in pubsub.listen():
@@ -233,7 +240,7 @@ class ConnectionManager:
             finally:
                 if pubsub:
                     try:
-                        await pubsub.aclose()
+                        await self._safe_await(pubsub.aclose())
                     except Exception:
                         pass
 

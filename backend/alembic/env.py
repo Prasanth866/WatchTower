@@ -15,30 +15,16 @@ import models  # noqa: F401 - ensure all models are imported so their metadata i
 config = context.config
 
 
-def _read_database_url_from_dotenv() -> str | None:
-    dotenv_path = Path(__file__).resolve().parents[1] / ".env"
-    if not dotenv_path.exists():
-        return None
-    for line in dotenv_path.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        if key.strip() == "DATABASE_URL":
-            return value.strip().strip('"').strip("'")
-    return None
+from core.config import get_settings
 
 
 def _resolve_database_url() -> str:
-    database_url = (
-        os.getenv("DATABASE_URL")
-        or _read_database_url_from_dotenv()
-        or config.get_main_option("sqlalchemy.url")
-    )
+    settings = get_settings()
+    database_url = settings.DATABASE_URL
     if not database_url or database_url.startswith("driver://"):
         raise RuntimeError(
             "DATABASE_URL is required for Alembic migrations. "
-            "Set DATABASE_URL environment variable or provide it in backend/.env"
+            "Set DATABASE_URL environment variable or configure it in your .env"
         )
     return to_asyncpg_database_url(database_url)
 

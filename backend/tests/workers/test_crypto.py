@@ -37,13 +37,13 @@ async def test_coingecko_fetch_maps_all_coins() -> None:
 
     events = await worker.fetch()
 
-    # The mapping has 7 coins defined. 3 of them are mock-returned here.
+    # 7 coins defined in mapping, 3 returned by fake API
     assert len(events) == 3
 
-    btc = next(e for e in events if e.topic == "crypto:btc")
+    btc = next(e for e in events if e.topic == "btc")
     assert btc.value == 61250.5
     assert btc.metadata["coin"] == "bitcoin"
 
-    sol = next(e for e in events if e.topic == "crypto:sol")
+    sol = next(e for e in events if e.topic == "sol")
     assert sol.value == 140.55
     assert sol.metadata["coin"] == "solana"

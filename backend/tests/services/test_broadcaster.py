@@ -7,32 +7,32 @@ class _DummyRedis:
         return 1
 
 
-def test_topic_keys_include_hierarchy_and_root() -> None:
-    keys = ConnectionManager._topic_keys("crypto:eth.price")
-    assert keys[0] == "crypto:eth.price"
-    assert "crypto:eth" in keys
-    assert "crypto" in keys
+def test_coin_keys_include_hierarchy_and_root() -> None:
+    # Coins use flat symbols now, but the broadcaster still supports dotted sub-keys
+    keys = ConnectionManager._topic_keys("eth.price")
+    assert keys[0] == "eth.price"
+    assert "eth" in keys
 
 
-def test_connection_counts_returns_per_topic_counts() -> None:
+def test_connection_counts_returns_per_coin_counts() -> None:
     manager = ConnectionManager(_DummyRedis())
     manager._connection = {
-        "crypto:btc": {object(): "u1", object(): "u2"},
-        "crypto:eth": {object(): "u3"},
+        "btc": {object(): "u1", object(): "u2"},
+        "eth": {object(): "u3"},
     }
 
     counts = manager.get_connection_counts()
-    assert counts == {"crypto:btc": 2, "crypto:eth": 1}
+    assert counts == {"btc": 2, "eth": 1}
 
 
 @pytest.mark.asyncio
-async def test_is_user_connected_matches_parent_topic_for_subtopic_event() -> None:
+async def test_is_user_connected_matches_parent_coin_for_sub_event() -> None:
     manager = ConnectionManager(_DummyRedis())
     manager._connection = {
-        "crypto:eth": {object(): "u3"},
+        "eth": {object(): "u3"},
     }
 
-    assert await manager.is_user_connected("u3", "crypto:eth.price") is True
+    assert await manager.is_user_connected("u3", "eth.price") is True
 
 
 def test_side_effect_runtime_reports_writer_stats() -> None:
@@ -54,14 +54,14 @@ async def test_is_user_connected_checks_redis_fallback() -> None:
     class _MockRedis:
         async def hgetall(self, key):
             if key == "watchtower:user:u4:topics":
-                return {"crypto:eth": "1"}
+                return {"eth": "1"}
             return {}
 
     manager = ConnectionManager(_MockRedis())
     manager._connection = {}
-    
-    assert await manager.is_user_connected("u4", "crypto:eth.price") is True
-    assert await manager.is_user_connected("u4", "crypto:btc") is False
+
+    assert await manager.is_user_connected("u4", "eth.price") is True
+    assert await manager.is_user_connected("u4", "btc") is False
 
 
 @pytest.mark.asyncio
@@ -69,22 +69,22 @@ async def test_send_user_alert_sends_to_ws() -> None:
     class _MockWS:
         def __init__(self):
             self.sent_payloads = []
-            
+
         async def send_json(self, payload):
             self.sent_payloads.append(payload)
 
     ws1 = _MockWS()
     ws2 = _MockWS()
-    
+
     manager = ConnectionManager(_DummyRedis())
     manager._connection = {
-        "crypto:eth": {ws1: "u1"},
-        "crypto:btc": {ws2: "u2"}
+        "eth": {ws1: "u1"},
+        "btc": {ws2: "u2"}
     }
-    
+
     payload = {"type": "alert", "trigger_id": "t1"}
-    await manager.send_user_alert("u1", "crypto:eth", payload)
-    
+    await manager.send_user_alert("u1", "eth", payload)
+
     assert len(ws1.sent_payloads) == 1
     assert ws1.sent_payloads[0] == payload
     assert len(ws2.sent_payloads) == 0

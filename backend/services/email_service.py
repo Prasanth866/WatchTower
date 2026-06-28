@@ -1,8 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from uuid import UUID
-import smtplib
-from email.mime.text import MIMEText
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import get_settings
@@ -13,8 +12,8 @@ log = get_logger(__name__)
 settings = get_settings()
 
 
-def _smtp_configured() -> bool:
-    return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD and settings.SMTP_FROM)
+def _resend_configured() -> bool:
+    return bool(settings.RESEND_API_KEY and settings.RESEND_FROM_EMAIL)
 
 
 async def queue_alert_email(
@@ -34,20 +33,25 @@ async def queue_alert_email(
     db.add(queued)
 
 
-def _send_email(to_email: str, subject: str, body: str) -> None:
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = settings.SMTP_FROM
-    msg["To"] = to_email
-
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-        server.starttls()
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.send_message(msg)
+async def _send_email_async(client: httpx.AsyncClient, to_email: str, subject: str, body: str) -> None:
+    url = "https://api.resend.com/emails"
+    headers = {
+        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "from": settings.RESEND_FROM_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "text": body,
+    }
+    response = await client.post(url, json=payload, headers=headers)
+    response.raise_for_status()
 
 
 async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
-    if not _smtp_configured():
+    if not _resend_configured():
+        log.warning("Resend service is not configured. Skipping email queue dispatch.")
         return 0
 
     result = await db.execute(
@@ -57,19 +61,19 @@ async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
     if not pending:
         return 0
 
-    async def send_one(email: EmailQueue) -> bool:
-        try:
-            await asyncio.to_thread(_send_email, email.to_email, email.subject, email.body)
-            email.sent = True
-            email.sent_at = datetime.now(timezone.utc)
-            return True
-        except Exception as exc:
-            log.error("Email send failed", to_email=email.to_email, error=str(exc))
-            return False
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        async def send_one(email: EmailQueue) -> bool:
+            try:
+                await _send_email_async(client, email.to_email, email.subject, email.body)
+                email.sent = True
+                email.sent_at = datetime.now(timezone.utc)
+                return True
+            except Exception as exc:
+                log.error("Resend HTTP email send failed", to_email=email.to_email, error=str(exc))
+                return False
 
-    results = await asyncio.gather(*(send_one(email) for email in pending), return_exceptions=True)
-    sent_count = sum(1 for res in results if res is True)
+        results = await asyncio.gather(*(send_one(email) for email in pending), return_exceptions=True)
+        sent_count = sum(1 for res in results if res is True)
 
     await db.commit()
-
     return sent_count
