@@ -46,13 +46,7 @@ export interface Trigger {
 // Matches backend GET /api/v1/paper-trading/portfolio
 export interface Portfolio {
   cash_balance: number;
-  holdings_value: number;
-  total_value: number;
   initial_balance: number;
-  total_pnl: number;
-  total_pnl_pct: number;
-  realized_pnl: number;
-  allocation: Record<string, number>;
 }
 
 // Matches backend GET /api/v1/paper-trading/holdings
@@ -60,10 +54,6 @@ export interface Holding {
   coin: string;               // backend field name (uppercase e.g. "BTC")
   quantity: number;
   average_buy_price: number;  // backend field name
-  current_price: number;      // backend field name
-  market_value: number;       // backend field name
-  unrealized_pnl: number;     // backend field name
-  unrealized_pnl_pct: number; // backend field name
 }
 
 // Matches backend GET /api/v1/paper-trading/transactions
@@ -94,4 +84,21 @@ export interface ToastMessage {
   title: string;
   message: string;
   timestamp: string;
+}
+
+export interface QuantIndicators {
+  rsi: number;
+  ema20: number;
+  ema50: number;
+  macd: { value: number; signal: number };
+  bollinger: { middle: number; upper: number; lower: number };
+  atr: number;
+  score: number;
+  confidence: number;
+  rating: string;
+}
+
+export interface CoinHistoryResponse {
+  history: CoinHistoryPoint[];
+  indicators: QuantIndicators | null;
 }

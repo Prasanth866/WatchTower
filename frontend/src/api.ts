@@ -8,19 +8,21 @@ import {
   Holding,
   Transaction,
   SystemHealth,
+  CoinHistoryResponse,
+  QuantIndicators,
 } from './types';
 
 // ---------------------------------------------------------------------------
 // Static coin metadata (name/symbol/basePrice used in UI labels & fallbacks)
 // ---------------------------------------------------------------------------
 export const SUPPORTED_COINS: Record<CoinId, { name: string; symbol: string; basePrice: number; cap: number; vol: number }> = {
-  btc:  { name: 'Bitcoin',  symbol: 'BTC',  basePrice: 67420,  cap: 1320000000000, vol: 28400000000 },
-  eth:  { name: 'Ethereum', symbol: 'ETH',  basePrice: 3480,   cap: 418000000000,  vol: 14200000000 },
-  sol:  { name: 'Solana',   symbol: 'SOL',  basePrice: 148.5,  cap: 68000000000,   vol: 3100000000  },
-  ada:  { name: 'Cardano',  symbol: 'ADA',  basePrice: 0.38,   cap: 13500000000,   vol: 240000000   },
-  xrp:  { name: 'Ripple',   symbol: 'XRP',  basePrice: 0.59,   cap: 33000000000,   vol: 850000000   },
-  doge: { name: 'Dogecoin', symbol: 'DOGE', basePrice: 0.124,  cap: 18000000000,   vol: 920000000   },
-  dot:  { name: 'Polkadot', symbol: 'DOT',  basePrice: 5.85,   cap: 8300000000,    vol: 110000000   },
+  btc:  { name: 'Bitcoin',  symbol: 'BTC',  basePrice: 108000,  cap: 2140000000000, vol: 35000000000 },
+  eth:  { name: 'Ethereum', symbol: 'ETH',  basePrice: 2550,    cap: 307000000000,  vol: 12000000000 },
+  sol:  { name: 'Solana',   symbol: 'SOL',  basePrice: 175,     cap: 85000000000,   vol: 3500000000  },
+  ada:  { name: 'Cardano',  symbol: 'ADA',  basePrice: 0.82,    cap: 29000000000,   vol: 500000000   },
+  xrp:  { name: 'Ripple',   symbol: 'XRP',  basePrice: 2.40,    cap: 138000000000,  vol: 2500000000  },
+  doge: { name: 'Dogecoin', symbol: 'DOGE', basePrice: 0.26,    cap: 38000000000,   vol: 1800000000  },
+  dot:  { name: 'Polkadot', symbol: 'DOT',  basePrice: 4.80,    cap: 7500000000,    vol: 180000000   },
 };
 
 // ---------------------------------------------------------------------------
@@ -99,16 +101,45 @@ export const subscribeToPrices = (sub: PriceSubscription): (() => void) => {
   return () => _subscribers.delete(sub);
 };
 
+let _wsConnected = false;
+const _statusSubscribers = new Set<(connected: boolean) => void>();
+
+export const subscribeToWsStatus = (sub: (connected: boolean) => void): (() => void) => {
+  _statusSubscribers.add(sub);
+  sub(_wsConnected);
+  return () => _statusSubscribers.delete(sub);
+};
+
+function _setWsConnected(connected: boolean) {
+  if (_wsConnected !== connected) {
+    _wsConnected = connected;
+    _statusSubscribers.forEach((s) => s(_wsConnected));
+  }
+}
+
 function _notifyPriceSubscribers(alert?: { topic: string; value: number }) {
   _subscribers.forEach((s) => s({ ..._prices }, alert));
 }
 
-/** Update a single coin's price from a WS event. */
-function _applyPriceEvent(topic: string, value: number) {
+/** Update a single coin's price from a WS event, incorporating live market stats if available. */
+function _applyPriceEvent(
+  topic: string,
+  value: number,
+  metadata?: { market_cap?: number; total_volume?: number; change_24h?: number }
+) {
   const id = topic as CoinId;
   if (!_prices[id]) return;
-  const prev = _prices[id].price;
-  _prices[id] = { ..._prices[id], price: value, change24h: prev > 0 ? Number((((value - prev) / prev) * 100).toFixed(2)) : 0 };
+
+  // All stats come from the backend event — never derive change_24h on the frontend.
+  _prices[id] = {
+    ..._prices[id],
+    price: value,
+    change24h: metadata?.change_24h !== undefined
+      ? Number(metadata.change_24h.toFixed(2))
+      : _prices[id].change24h,
+    marketCap: metadata?.market_cap ?? _prices[id].marketCap,
+    totalVolume: metadata?.total_volume ?? _prices[id].totalVolume,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +164,7 @@ export function connectPriceFeed(coin: CoinId, onAlert?: (payload: object) => vo
     _ws = new WebSocket(`${location.origin.replace(/^http/, 'ws')}${url.replace(/^\/ws/, '')}`);
 
     _ws.onopen = () => {
+      _setWsConnected(true);
       _wsPingTimer = setInterval(() => {
         if (_ws?.readyState === WebSocket.OPEN) _ws.send(JSON.stringify({ type: 'ping' }));
       }, 30_000);
@@ -147,15 +179,16 @@ export function connectPriceFeed(coin: CoinId, onAlert?: (payload: object) => vo
           _notifyPriceSubscribers({ topic: data.topic, value: data.value });
           return;
         }
-        // Price event: { topic, value, unit, ... }
+        // Price event: { topic, value, unit, metadata, ... }
         if (data.topic && typeof data.value === 'number') {
-          _applyPriceEvent(data.topic, data.value);
+          _applyPriceEvent(data.topic, data.value, data.metadata);
           _notifyPriceSubscribers();
         }
       } catch { /* ignore malformed frames */ }
     };
 
     _ws.onclose = () => {
+      _setWsConnected(false);
       if (_wsPingTimer) clearInterval(_wsPingTimer);
       // Auto-reconnect if still on the same coin
       if (_currentWsCoin === coin) {
@@ -169,6 +202,7 @@ export function connectPriceFeed(coin: CoinId, onAlert?: (payload: object) => vo
 
 export function disconnectPriceFeed(): void {
   _currentWsCoin = null;
+  _setWsConnected(false);
   if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
   if (_wsPingTimer)      { clearInterval(_wsPingTimer);     _wsPingTimer = null;      }
   if (_ws) { _ws.onclose = null; _ws.close(); _ws = null; }
@@ -193,16 +227,26 @@ export const api = {
 
   register: async (form: Record<string, string>): Promise<UserProfile> => {
     const { email, password } = form;
-    const res = await post<{ id: string; email: string; created_at: string }>('/auth/register', { email, password });
-    return { ...res, emailNotifications: true };
+    const res = await post<{ id: string; email: string; created_at: string; email_notifications: boolean }>('/auth/register', { email, password });
+    return {
+      id: res.id,
+      email: res.email,
+      created_at: res.created_at,
+      emailNotifications: res.email_notifications,
+    };
   },
 
   getCurrentUser: async (): Promise<UserProfile | null> => {
     const token = getToken();
     if (!token) return null;
     try {
-      const res = await get<{ id: string; email: string; created_at: string }>('/auth/me');
-      return { ...res, emailNotifications: true };
+      const res = await get<{ id: string; email: string; created_at: string; email_notifications: boolean }>('/auth/me');
+      return {
+        id: res.id,
+        email: res.email,
+        created_at: res.created_at,
+        emailNotifications: res.email_notifications,
+      };
     } catch {
       clearToken();
       return null;
@@ -228,40 +272,68 @@ export const api = {
 
   updateNotificationPreferences: async (enabled: boolean): Promise<UserProfile> => {
     await patch<{ email_notifications: boolean }>('/auth/notifications', { email_notifications: enabled });
-    // Backend returns only the notification pref; refetch full profile
     const user = await api.getCurrentUser();
     if (!user) throw new Error('Session expired');
-    return { ...user, emailNotifications: enabled };
+    return user;
   },
 
   // ── Coins ──────────────────────────────────────────────────────────────────
   getCoins: async (): Promise<CoinInfo[]> => {
-    // Backend returns [{ symbol, name }]. Merge with live prices for full CoinInfo.
-    const list = await get<{ symbol: string; name: string }[]>('/coins/');
-    return list.map((c) => {
+    const list = await get<{
+      symbol: string;
+      name: string;
+      price?: number;
+      change24h?: number;
+      marketCap?: number;
+      totalVolume?: number;
+    }[]>('/coins/');
+
+    const result = list.map((c) => {
       const id = c.symbol.toLowerCase() as CoinId;
-      const live = _prices[id];
       const meta = SUPPORTED_COINS[id];
-      return live ?? {
+
+      const currentPrice = c.price ?? meta?.basePrice ?? 0;
+      const currentChange = c.change24h ?? 0;
+      const currentCap = c.marketCap ?? meta?.cap ?? 0;
+      const currentVol = c.totalVolume ?? meta?.vol ?? 0;
+
+      _prices[id] = {
         id,
         name: c.name,
         symbol: c.symbol,
-        price: meta?.basePrice ?? 0,
-        change24h: 0,
-        marketCap: meta?.cap ?? 0,
-        totalVolume: meta?.vol ?? 0,
+        price: currentPrice,
+        change24h: currentChange,
+        marketCap: currentCap,
+        totalVolume: currentVol,
       };
+
+      return _prices[id];
     });
+
+    // Push the fresh backend prices to all subscribers immediately so
+    // components like TradingTerminal don't wait for the next WS tick.
+    _notifyPriceSubscribers();
+
+    return result;
   },
 
-  getCoinHistory: async (coinId: CoinId, period: '1d' | '7d' | '30d'): Promise<CoinHistoryPoint[]> => {
+  getCoinHistory: async (coinId: CoinId, period: '1d' | '7d' | '30d'): Promise<CoinHistoryResponse> => {
     const days = period === '1d' ? 1 : period === '7d' ? 7 : 30;
-    const data = await get<{ prices: [number, number][] }>(`/coins/${coinId}/history?days=${days}`);
-    return data.prices.map(([ts, price]) => ({
+    const data = await get<{
+      prices: [number, number][];
+      indicators?: QuantIndicators;
+    }>(`/coins/${coinId}/history?days=${days}`);
+
+    const history = data.prices.map(([ts, price]) => ({
       timestamp: new Date(ts).toISOString(),
       price,
       volume: 0,
     }));
+
+    return {
+      history,
+      indicators: data.indicators ?? null,
+    };
   },
 
   // ── Triggers ───────────────────────────────────────────────────────────────

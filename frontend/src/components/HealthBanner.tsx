@@ -8,12 +8,19 @@ export const HealthBanner: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const [latency, setLatency] = useState<number | null>(null);
+
   const fetchHealth = async () => {
     setIsRefreshing(true);
+    const start = performance.now();
     try {
       const data = await api.getHealth();
+      const end = performance.now();
+      setLatency(Math.round(end - start));
       setHealth(data);
     } catch {
+      const end = performance.now();
+      setLatency(Math.round(end - start));
       setHealth({
         api: 'down',
         redis: 'down',
@@ -144,8 +151,8 @@ export const HealthBanner: React.FC = () => {
             </div>
 
             <div className="border-t border-zinc-900 pt-3 mt-3 flex justify-between items-center text-[10px] text-zinc-500 font-mono">
-              <span>LATENCY: ~24ms</span>
-              <span>CACHE TTL: 30s</span>
+              <span>LATENCY: {latency !== null ? `~${latency}ms` : '--'}</span>
+              <span>CACHE TTL: 15s</span>
             </div>
           </div>
         </>

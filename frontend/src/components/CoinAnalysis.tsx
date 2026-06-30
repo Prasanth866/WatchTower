@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api, subscribeToPrices, SUPPORTED_COINS } from '../api';
-import { CoinId, CoinInfo, CoinHistoryPoint } from '../types';
+import { CoinId, CoinInfo, CoinHistoryPoint, QuantIndicators } from '../types';
 import { useToast } from './ToastProvider';
-import { Activity, BarChart2, TrendingUp, TrendingDown, Clock, Calendar, Database } from 'lucide-react';
+import { Activity, BarChart2, TrendingUp, TrendingDown, Clock, Calendar, Database, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CoinAnalysisProps {
@@ -15,6 +15,7 @@ type Period = '1d' | '7d' | '30d';
 export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSelectCoin }) => {
   const [coins, setCoins] = useState<Record<CoinId, CoinInfo> | null>(null);
   const [history, setHistory] = useState<CoinHistoryPoint[]>([]);
+  const [indicators, setIndicators] = useState<QuantIndicators | null>(null);
   const [period, setPeriod] = useState<Period>('7d');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
@@ -36,8 +37,9 @@ export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSe
   const fetchHistory = async () => {
     setIsLoadingHistory(true);
     try {
-      const data = await api.getCoinHistory(selectedCoinId, period);
-      setHistory(data);
+      const res = await api.getCoinHistory(selectedCoinId, period);
+      setHistory(res.history);
+      setIndicators(res.indicators);
     } catch {
       addToast('error', 'History Error', 'Failed to retrieve cache historical charts.');
     } finally {
@@ -111,8 +113,9 @@ export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSe
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
     if (!chartRef.current || points.length === 0) return;
     const rect = chartRef.current.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const percentage = (clientX - paddingX) / chartWidth;
+    const scaleX = svgWidth / rect.width;
+    const svgClientX = (e.clientX - rect.left) * scaleX;
+    const percentage = (svgClientX - paddingX) / chartWidth;
 
     // Find closest index
     let index = Math.round(percentage * (points.length - 1));
@@ -472,7 +475,12 @@ export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSe
                 id="chart-floating-tooltip"
                 className="absolute bg-zinc-950 border border-indigo-500/30 p-2.5 rounded-lg shadow-xl z-20 pointer-events-none"
                 style={{
-                  left: `${Math.min(svgWidth - 160, Math.max(10, (hoveredPoint.x / svgWidth) * 100))}%`,
+                  left: `${(hoveredPoint.x / svgWidth) * 100}%`,
+                  transform: hoveredPoint.x / svgWidth < 0.2
+                    ? 'translateX(10%)'
+                    : hoveredPoint.x / svgWidth > 0.8
+                    ? 'translateX(-110%)'
+                    : 'translateX(-50%)',
                   top: '12px',
                 }}
               >
@@ -491,6 +499,156 @@ export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSe
             <span>* DOUBLE-TAP PERIOD TO INVALIDATE MEMORY RETRIEVAL (TTL MAPPED).</span>
           </div>
 
+        </div>
+
+        {/* QUANT ENGINE & TECHNICAL INDICATORS */}
+        <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-2xl p-6 backdrop-blur-md shadow-xl flex flex-col gap-6">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+            <div className="flex items-center gap-2">
+              <Cpu size={16} className="text-indigo-400 animate-pulse" />
+              <span className="text-xs font-bold font-mono text-zinc-300 uppercase tracking-wider">QUANTITATIVE RATING ENGINE</span>
+            </div>
+            {indicators && (
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold tracking-wider ${
+                indicators.rating.includes('Strong Bullish') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
+                indicators.rating.includes('Bullish') ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+                indicators.rating.includes('Neutral') ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' :
+                indicators.rating.includes('Strong Bearish') ? 'bg-rose-600/10 border-rose-600/30 text-rose-500' :
+                'bg-rose-500/10 border-rose-500/30 text-rose-400'
+              }`}>
+                {indicators.rating.toUpperCase()}
+              </span>
+            )}
+          </div>
+
+          {!indicators ? (
+            <div className="text-center py-6 text-xs font-mono text-zinc-500">
+              SELECT A COIN OR INVALIDATE CACHE TO LOAD QUANT ANALYSIS
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              {/* Gauge and Score details */}
+              <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-zinc-900/30 border border-zinc-900 rounded-xl text-center">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-2">Quant Score</span>
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  {/* Circular progress SVG */}
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-zinc-800"
+                      strokeWidth="2.5"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className={
+                        indicators.score >= 80 ? 'text-emerald-400' :
+                        indicators.score >= 60 ? 'text-green-400' :
+                        indicators.score >= 40 ? 'text-amber-400' :
+                        'text-rose-400'
+                      }
+                      strokeDasharray={`${indicators.score}, 100`}
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <div className="absolute text-center">
+                    <span className="text-xl font-black font-mono text-zinc-100">{indicators.score}</span>
+                    <span className="block text-[8px] font-mono text-zinc-500 mt-0.5">SCORE</span>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono text-zinc-400">Confidence:</span>
+                  <span className="text-xs font-bold font-mono text-indigo-400">{indicators.confidence}%</span>
+                </div>
+              </div>
+
+              {/* Grid of indicators */}
+              <div className="md:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* RSI */}
+                <div className="p-3.5 bg-zinc-900/20 border border-zinc-900 rounded-xl flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">RSI (14)</span>
+                    <span className="text-base font-bold font-mono text-zinc-200 mt-1 block">{indicators.rsi}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[8px] font-mono text-zinc-500">MOMENTUM</span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold ${
+                      indicators.rsi < 30 ? 'bg-emerald-500/10 text-emerald-400' :
+                      indicators.rsi > 70 ? 'bg-rose-500/10 text-rose-400' :
+                      'bg-zinc-800 text-zinc-400'
+                    }`}>
+                      {indicators.rsi < 30 ? 'OVERSOLD' : indicators.rsi > 70 ? 'OVERBOUGHT' : 'NEUTRAL'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* EMA Trend */}
+                <div className="p-3.5 bg-zinc-900/20 border border-zinc-900 rounded-xl flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">EMA CROSS</span>
+                    <span className="text-[11px] font-semibold font-mono text-zinc-300 mt-1 block">
+                      20: ${indicators.ema20.toLocaleString(undefined, { minimumFractionDigits: activeCoin.id === 'doge' || activeCoin.id === 'ada' ? 3 : 1 })}
+                    </span>
+                    <span className="text-[11px] font-mono text-zinc-500 mt-0.5 block">
+                      50: ${indicators.ema50.toLocaleString(undefined, { minimumFractionDigits: activeCoin.id === 'doge' || activeCoin.id === 'ada' ? 3 : 1 })}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[8px] font-mono text-zinc-500">TREND</span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold ${
+                      indicators.ema20 > indicators.ema50 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                    }`}>
+                      {indicators.ema20 > indicators.ema50 ? 'BULLISH' : 'BEARISH'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* MACD */}
+                <div className="p-3.5 bg-zinc-900/20 border border-zinc-900 rounded-xl flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">MACD (12, 26, 9)</span>
+                    <span className="text-[11px] font-semibold font-mono text-zinc-300 mt-1 block">
+                      MACD: {indicators.macd.value}
+                    </span>
+                    <span className="text-[11px] font-mono text-zinc-500 mt-0.5 block">
+                      Signal: {indicators.macd.signal}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[8px] font-mono text-zinc-500">CROSSOVER</span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold ${
+                      indicators.macd.value > indicators.macd.signal ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                    }`}>
+                      {indicators.macd.value > indicators.macd.signal ? 'BULLISH' : 'BEARISH'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bollinger Bands */}
+                <div className="p-3.5 bg-zinc-900/20 border border-zinc-900 rounded-xl flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">BOLLINGER BANDS (20, 2)</span>
+                    <span className="text-[10px] font-mono text-zinc-300 mt-1 block">
+                      Upper: ${indicators.bollinger.upper.toLocaleString(undefined, { maximumFractionDigits: activeCoin.id === 'doge' || activeCoin.id === 'ada' ? 3 : 1 })}
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-300 block">
+                      Lower: ${indicators.bollinger.lower.toLocaleString(undefined, { maximumFractionDigits: activeCoin.id === 'doge' || activeCoin.id === 'ada' ? 3 : 1 })}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[8px] font-mono text-zinc-500 font-semibold text-indigo-400">ATR: {indicators.atr}</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                      Mid: ${indicators.bollinger.middle.toLocaleString(undefined, { maximumFractionDigits: activeCoin.id === 'doge' || activeCoin.id === 'ada' ? 3 : 1 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, SUPPORTED_COINS } from '../api';
+import { api, SUPPORTED_COINS, subscribeToPrices } from '../api';
 import { CoinId, Portfolio, Holding, Transaction } from '../types';
 import { useToast } from './ToastProvider';
 import { Landmark, TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, History, PieChart, RefreshCcw, Briefcase, HelpCircle, AlertTriangle } from 'lucide-react';
@@ -10,7 +10,7 @@ export const TradingTerminal: React.FC = () => {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<'positions' | 'transactions'>('positions');
-  const [livePrices] = useState<Record<CoinId, number>>({} as Record<CoinId, number>);
+  const [livePrices, setLivePrices] = useState<Record<CoinId, number>>({} as Record<CoinId, number>);
 
   // Live Trading Form States
   const [tradeAction, setTradeAction] = useState<'buy' | 'sell'>('buy');
@@ -44,11 +44,20 @@ export const TradingTerminal: React.FC = () => {
     loadData();
   }, []);
 
-  // Portfolio is refreshed via loadData() after each trade
-  // Prices stream in through the WS connection managed by App.tsx
+  useEffect(() => {
+    const unsubscribe = subscribeToPrices((latestPrices) => {
+      const pricesMap = {} as Record<CoinId, number>;
+      (Object.keys(latestPrices) as CoinId[]).forEach((coinId) => {
+        pricesMap[coinId] = latestPrices[coinId].price;
+      });
+      setLivePrices(pricesMap);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleBuy = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     const amount = parseFloat(buyAmountUsd);
     if (isNaN(amount) || amount <= 0) {
       addToast('error', 'Trading Error', 'Please specify a positive USD purchase amount.');
@@ -74,6 +83,7 @@ export const TradingTerminal: React.FC = () => {
 
   const handleSell = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     const quantity = parseFloat(sellQuantity);
     if (isNaN(quantity) || quantity <= 0) {
       addToast('error', 'Trading Error', 'Please specify a positive asset quantity to sell.');
@@ -99,7 +109,7 @@ export const TradingTerminal: React.FC = () => {
 
   const handleQuickPercentBuy = (percent: number) => {
     if (!portfolio) return;
-    const targetAmount = Math.floor(portfolio.cashBalance * percent);
+    const targetAmount = Math.floor(portfolio.cash_balance * percent);
     setBuyAmountUsd(targetAmount > 0 ? targetAmount.toString() : '');
   };
 
@@ -125,12 +135,22 @@ export const TradingTerminal: React.FC = () => {
     );
   }
 
-  const isPnLUp = portfolio.total_pnl >= 0;
+  // Dynamic frontend calculations using live prices
+  const holdingsValue = holdings.reduce((sum, h) => {
+    const coinId = h.coin.toLowerCase() as CoinId;
+    const livePrice = livePrices[coinId] || h.average_buy_price;
+    return sum + (h.quantity * livePrice);
+  }, 0);
+
+  const totalValue = portfolio.cash_balance + holdingsValue;
+  const totalPnL = totalValue - portfolio.initial_balance;
+  const totalPnLPct = portfolio.initial_balance > 0 ? (totalPnL / portfolio.initial_balance) * 100 : 0;
+  const isPnLUp = totalPnL >= 0;
 
   // Custom SVG Donut allocation metrics calculation
-  const totalAlloc = portfolio.total_value > 0 ? portfolio.total_value : 1;
+  const totalAlloc = totalValue > 0 ? totalValue : 1;
   const cashPercent = (portfolio.cash_balance / totalAlloc) * 100;
-  const cryptoPercent = (portfolio.holdings_value / totalAlloc) * 100;
+  const cryptoPercent = (holdingsValue / totalAlloc) * 100;
 
   // SVG Pie chart helper parameters (radius 32, center 50)
   const r = 32;
@@ -151,13 +171,13 @@ export const TradingTerminal: React.FC = () => {
           <div className="z-10">
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">TOTAL PORTFOLIO NET WORTH</span>
             <span className="text-3xl font-black font-mono text-zinc-100 tracking-tight leading-none block">
-              ${portfolio.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
             <span className={`text-xs font-mono font-bold flex items-center gap-1 mt-2.5 leading-none ${
               isPnLUp ? 'text-emerald-400' : 'text-rose-400'
             }`}>
               {isPnLUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              {isPnLUp ? '+' : ''}${portfolio.total_pnl.toLocaleString()} ({isPnLUp ? '+' : ''}{portfolio.total_pnl_pct.toFixed(2)}%)
+              {isPnLUp ? '+' : ''}${totalPnL.toLocaleString()} ({isPnLUp ? '+' : ''}{totalPnLPct.toFixed(2)}%)
             </span>
           </div>
 
@@ -215,7 +235,7 @@ export const TradingTerminal: React.FC = () => {
           <div>
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">HOLDINGS VALUATION</span>
             <span className="text-xl font-extrabold font-mono text-indigo-400 block">
-              ${portfolio.holdings_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${holdingsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <span className="text-[10px] font-mono text-zinc-600 mt-2 block">
@@ -459,8 +479,10 @@ export const TradingTerminal: React.FC = () => {
                     {holdings.map((h) => {
                       const coinId = h.coin.toLowerCase() as CoinId;
                       const livePrice = livePrices[coinId] || h.average_buy_price;
-                      const roiValue = h.unrealized_pnl;
-                      const roiPercent = h.unrealized_pnl_pct;
+                      const marketValue = h.quantity * livePrice;
+                      const costBasis = h.quantity * h.average_buy_price;
+                      const roiValue = marketValue - costBasis;
+                      const roiPercent = costBasis > 0 ? (roiValue / costBasis) * 100 : 0;
                       const isRoiUp = roiValue >= 0;
 
                       return (
@@ -469,7 +491,7 @@ export const TradingTerminal: React.FC = () => {
                           <td className="py-3.5 text-zinc-400">{h.quantity}</td>
                           <td className="py-3.5 text-zinc-400">${h.average_buy_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                           <td className="py-3.5 text-zinc-400">${livePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3.5 font-bold text-zinc-200">${h.market_value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3.5 font-bold text-zinc-200">${marketValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                           <td className={`py-3.5 text-right font-bold ${isRoiUp ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {isRoiUp ? '+' : ''}{roiPercent.toFixed(2)}%
                           </td>

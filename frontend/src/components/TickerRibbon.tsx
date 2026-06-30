@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { CoinInfo, CoinId } from '../types';
-import { subscribeToPrices, SUPPORTED_COINS } from '../api';
+import { subscribeToPrices, SUPPORTED_COINS, subscribeToWsStatus } from '../api';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 export const TickerRibbon: React.FC<{ onSelectCoin?: (id: CoinId) => void; selectedCoinId?: CoinId }> = ({
@@ -10,6 +10,14 @@ export const TickerRibbon: React.FC<{ onSelectCoin?: (id: CoinId) => void; selec
   const [prices, setPrices] = useState<Record<CoinId, CoinInfo> | null>(null);
   const prevPricesRef = useRef<Record<CoinId, number>>({} as Record<CoinId, number>);
   const [tickDirections, setTickDirections] = useState<Record<CoinId, 'up' | 'down' | null>>({} as Record<CoinId, 'up' | 'down' | null>);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToWsStatus((connected) => {
+      setWsConnected(connected);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToPrices((latestPrices) => {
@@ -68,12 +76,16 @@ export const TickerRibbon: React.FC<{ onSelectCoin?: (id: CoinId) => void; selec
   return (
     <div id="ticker-ribbon-container" className="w-full bg-zinc-950/80 border-b border-zinc-900 overflow-x-auto select-none no-scrollbar backdrop-blur-md">
       <div className="flex items-center min-w-max px-4 py-2.5 gap-6">
-        <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-md">
+        <div className={`flex items-center gap-1.5 px-3 py-1 border rounded-md transition-colors duration-300 ${wsConnected ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            {wsConnected && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            )}
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${wsConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
           </span>
-          <span className="text-[10px] text-indigo-400 font-mono tracking-widest font-bold">WS:LIVE</span>
+          <span className={`text-[10px] font-mono tracking-widest font-bold ${wsConnected ? 'text-indigo-400' : 'text-rose-400'}`}>
+            {wsConnected ? 'WS:LIVE' : 'WS:OFFLINE'}
+          </span>
         </div>
 
         <div className="flex items-center gap-4">

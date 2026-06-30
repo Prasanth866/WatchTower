@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { UserProfile } from '../types';
 import { useToast } from './ToastProvider';
@@ -22,6 +22,18 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ onAuthSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      setResetToken(token);
+      setScreen('reset');
+      
+      // Clean up URL query parameters and pathname back to root
+      window.history.replaceState({}, document.title, '/');
+    }
+  }, []);
 
   // Real-time password validation state
   const isLengthValid = password.length >= 8 && password.length <= 72;

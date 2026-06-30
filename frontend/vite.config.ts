@@ -18,10 +18,11 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
-        // Proxy all REST API calls to the FastAPI backend
+        // Proxy all REST API and WebSocket calls to the FastAPI backend
         '/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,
+          ws: true,
         },
         // Proxy WebSocket connections to the FastAPI backend
         '/ws': {

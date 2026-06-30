@@ -40,7 +40,17 @@ function AppContent() {
     verifyAuth();
   }, []);
 
-  // 2. WebSocket price feed — reconnects when selected coin changes
+  // 2. Seed all coin prices from the backend REST API on login.
+  //    Without this, _prices stays at stale hardcoded basePrice values and
+  //    only the single WebSocket-connected coin gets real prices.
+  useEffect(() => {
+    if (!user) return;
+    api.getCoins().catch(() => {
+      // Best-effort; WebSocket will still update the selected coin
+    });
+  }, [user]);
+
+  // 3. WebSocket price feed — reconnects when selected coin changes
   useEffect(() => {
     if (!user) return;
 
