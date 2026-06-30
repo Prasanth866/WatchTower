@@ -58,6 +58,7 @@ class UserRead(BaseModel):
     id: uuid.UUID
     email: EmailStr
     created_at: datetime
+    email_notifications: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

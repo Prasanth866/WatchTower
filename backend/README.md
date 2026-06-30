@@ -642,8 +642,9 @@ Subscribe to real-time price updates for a coin. Requires authentication via a q
 | `SECRET_KEY` | yes | JWT signing key (min 32 chars) |
 | `ALGORITHM` | no | JWT algorithm (default: `HS256`) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | Token lifetime (default: `30`) |
-| `RESEND_API_KEY` | no | Resend API key for email alerts |
-| `RESEND_FROM_EMAIL` | no | Verified sender email address |
+| `BREVO_API_KEY` | no | Brevo API key for email alerts |
+| `BREVO_FROM_EMAIL` | no | Verified sender email address |
+| `BREVO_SENDER_NAME` | no | Sender name display (default: `WatchTower`) |
 | `FRONTEND_URL` | no | Frontend URL (default: `http://localhost:5173`) |
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated or JSON list of allowed origins |
 | `ENABLE_WORKERS` | no | Enable price/email workers (default: `true`) |

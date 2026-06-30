@@ -34,20 +34,22 @@ def _build_paper_trading_app(*, current_user=None, db_session=None, redis_client
     return app
 
 
-def _mock_db_for_account(account: PaperAccount, db: AsyncMock) -> None:
+def _mock_db_for_account(account: PaperAccount, db: AsyncMock, exists: bool = True) -> None:
     """
     Set up the AsyncMock db to return the given account for
-    get_or_create_account's INSERT...ON CONFLICT + SELECT pattern.
-
-    get_or_create_account does:
-      1. db.execute(insert stmt)   → no meaningful return value needed
-      2. db.commit()
-      3. db.execute(select stmt)   → must return scalar_one() == account
+    get_or_create_account's pattern.
     """
-    insert_result = MagicMock()  # INSERT result; not used directly
     select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = account
     select_result.scalar_one.return_value = account
-    db.execute.side_effect = [insert_result, select_result]
+
+    if exists:
+        db.execute.side_effect = [select_result]
+    else:
+        select_result_none = MagicMock()
+        select_result_none.scalar_one_or_none.return_value = None
+        insert_result = MagicMock()
+        db.execute.side_effect = [select_result_none, insert_result, select_result]
 
 
 @pytest.mark.asyncio
@@ -63,7 +65,7 @@ async def test_get_account_details_auto_creates_account() -> None:
     )
 
     db = AsyncMock(spec=AsyncSession)
-    _mock_db_for_account(account, db)
+    _mock_db_for_account(account, db, exists=False)
 
     app = _build_paper_trading_app(current_user=mock_user, db_session=db)
 
@@ -75,8 +77,8 @@ async def test_get_account_details_auto_creates_account() -> None:
     assert data["cash_balance"] == 100000.0
     assert data["initial_balance"] == 100000.0
 
-    # Verify INSERT + commit + SELECT were all called
-    assert db.execute.call_count == 2
+    # Verify SELECT (first, returns None) + INSERT + SELECT (returns account) were called
+    assert db.execute.call_count == 3
     db.commit.assert_called_once()
 
 
@@ -94,16 +96,16 @@ async def test_buy_coin_success() -> None:
 
     db = AsyncMock(spec=AsyncSession)
 
-    # get_or_create_account: INSERT result + SELECT result
-    insert_result = MagicMock()
+    # get_or_create_account: SELECT result (finds account)
     select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = account
     select_result.scalar_one.return_value = account
 
     # Holding select (empty — no existing holding)
     holding_result = MagicMock()
     holding_result.scalar_one_or_none.return_value = None
 
-    db.execute.side_effect = [insert_result, select_result, holding_result]
+    db.execute.side_effect = [select_result, holding_result]
 
     mock_redis = AsyncMock()
     mock_redis.get.return_value = "50000.0"  # BTC price is 50,000
@@ -123,8 +125,8 @@ async def test_buy_coin_success() -> None:
     assert data["remaining_cash"] == pytest.approx(8000.0, rel=1e-6)
     assert "price_source" in data  # New field — must be present
 
-    # commit is called twice: once in get_or_create_account (INSERT ON CONFLICT) and once for the trade
-    assert db.commit.call_count == 2
+    # commit is called once: only for the trade (none in get_or_create_account since account exists)
+    assert db.commit.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -178,15 +180,15 @@ async def test_sell_coin_success() -> None:
 
     db = AsyncMock(spec=AsyncSession)
 
-    # get_or_create_account: INSERT result + SELECT result
-    insert_result = MagicMock()
+    # get_or_create_account: SELECT result (finds account)
     select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = account
     select_result.scalar_one.return_value = account
 
     holding_result = MagicMock()
     holding_result.scalar_one_or_none.return_value = holding
 
-    db.execute.side_effect = [insert_result, select_result, holding_result]
+    db.execute.side_effect = [select_result, holding_result]
 
     mock_redis = AsyncMock()
     mock_redis.get.return_value = "60000.0"  # BTC rose to 60k
@@ -206,12 +208,46 @@ async def test_sell_coin_success() -> None:
     assert data["price_source"] in ("redis_cache", "coingecko_api", "mock_fallback")
     assert holding.quantity == pytest.approx(0.02, rel=1e-8)  # Remaining
 
-    # commit is called twice: once in get_or_create_account (INSERT ON CONFLICT) and once for the trade
-    assert db.commit.call_count == 2
+    # commit is called once: only for the trade
+    assert db.commit.call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_portfolio_valuation() -> None:
+async def test_portfolio_status() -> None:
+    user_id = uuid4()
+    mock_user = User(id=user_id, email="pt@test.com")
+    account_id = uuid4()
+
+    account = PaperAccount(
+        id=account_id,
+        user_id=user_id,
+        cash_balance=8000.0,
+        initial_balance=10000.0,
+    )
+
+    db = AsyncMock(spec=AsyncSession)
+
+    # get_or_create_account: SELECT result (finds account)
+    select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = account
+    select_result.scalar_one.return_value = account
+
+    db.execute.side_effect = [select_result]
+
+    app = _build_paper_trading_app(current_user=mock_user, db_session=db)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/paper-trading/portfolio")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+
+    assert data["cash_balance"] == 8000.0
+    assert data["initial_balance"] == 10000.0
+
+
+@pytest.mark.asyncio
+async def test_holdings_status() -> None:
     user_id = uuid4()
     mock_user = User(id=user_id, email="pt@test.com")
     account_id = uuid4()
@@ -230,46 +266,29 @@ async def test_portfolio_valuation() -> None:
             average_buy_price=50000.0,
         )
     ]
-    transactions = [
-        Transaction(
-            account_id=account_id,
-            coin_symbol="btc",
-            type="BUY",
-            quantity=0.02,
-            price=50000.0,
-            total=1000.0,
-        )
-    ]
 
     db = AsyncMock(spec=AsyncSession)
 
-    # get_or_create_account: INSERT result + SELECT result
-    insert_result = MagicMock()
+    # get_or_create_account: SELECT result (finds account)
     select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = account
     select_result.scalar_one.return_value = account
 
     # Holdings query
     holdings_result = MagicMock()
     holdings_result.scalars.return_value.all.return_value = holdings
 
-    # Transactions query
-    txs_result = MagicMock()
-    txs_result.scalars.return_value.all.return_value = transactions
+    db.execute.side_effect = [select_result, holdings_result]
 
-    db.execute.side_effect = [insert_result, select_result, holdings_result, txs_result]
-
-    mock_redis = AsyncMock()
-    mock_redis.get.return_value = "60000.0"  # BTC is 60k
-
-    app = _build_paper_trading_app(current_user=mock_user, db_session=db, redis_client=mock_redis)
+    app = _build_paper_trading_app(current_user=mock_user, db_session=db)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/paper-trading/portfolio")
+        response = await client.get("/api/v1/paper-trading/holdings")
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
 
-    # 8000 (cash) + 0.02 * 60000 (1200) = 9200
-    assert data["total_value"] == pytest.approx(9200.0, rel=1e-6)
-    assert data["total_pnl"] == pytest.approx(-800.0, rel=1e-6)  # initial was 10000
-    assert data["holdings"][0]["unrealized_pnl"] == pytest.approx(200.0, rel=1e-6)  # 1200 - 1000
+    assert len(data) == 1
+    assert data[0]["coin"] == "BTC"
+    assert data[0]["quantity"] == 0.02
+    assert data[0]["average_buy_price"] == 50000.0

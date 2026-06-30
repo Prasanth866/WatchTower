@@ -51,7 +51,7 @@ async def test_get_coin_history_cache_hit() -> None:
         response = await client.get("/api/v1/coins/btc/history?days=7")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {"prices": [[1000, 60000.0]]}
+    assert response.json() == {"prices": [[1000, 60000.0]], "indicators": {}}
     mock_redis.get.assert_called_once_with("history:bitcoin:7")
 
 
@@ -82,7 +82,7 @@ async def test_get_coin_history_cache_miss_calls_coingecko_and_caches() -> None:
             response = await client.get("/api/v1/coins/btc/history?days=7")
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == {"prices": [[2000, 61000.0]]}
+        assert response.json() == {"prices": [[2000, 61000.0]], "indicators": {}}
         
         # Check HTTP GET parameters
         assert len(mock_calls) == 1
@@ -93,7 +93,7 @@ async def test_get_coin_history_cache_miss_calls_coingecko_and_caches() -> None:
         # Check Redis set cache call (TTL = 300 for days=7)
         mock_redis.set.assert_called_once_with(
             "history:bitcoin:7",
-            '{"prices": [[2000, 61000.0]]}',
+            '{"prices": [[2000, 61000.0]], "indicators": {}}',
             ex=300
         )
 

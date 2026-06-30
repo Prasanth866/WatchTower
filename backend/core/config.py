@@ -17,8 +17,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SQLALCHEMY_ECHO: bool = False
-    RESEND_API_KEY: str = Field(default="", validation_alias=AliasChoices("RESEND_API_KEY", "RESEND_APT_KEY"))
-    RESEND_FROM_EMAIL: str = Field(default="", validation_alias=AliasChoices("RESEND_FROM_EMAIL", "EMAIL_FROM", "SMTP_FROM"))
+    BREVO_API_KEY: str = Field(default="", validation_alias=AliasChoices("BREVO_API_KEY"))
+    BREVO_FROM_EMAIL: str = Field(default="", validation_alias=AliasChoices("BREVO_FROM_EMAIL", "EMAIL_FROM", "SMTP_FROM"))
+    BREVO_SENDER_NAME: str = Field(default="WatchTower", validation_alias=AliasChoices("BREVO_SENDER_NAME"))
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ALLOWED_ORIGINS: str = "http://localhost:5173"
     RATE_LIMIT_STORAGE_URI: str = "memory://"

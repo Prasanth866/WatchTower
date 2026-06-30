@@ -16,8 +16,11 @@ _EMAIL_MAX_RETRIES = 2
 _EMAIL_RETRY_DELAY = 1.0
 
 
-def _resend_configured() -> bool:
-    return bool(settings.RESEND_API_KEY and settings.RESEND_FROM_EMAIL)
+def _brevo_configured() -> bool:
+    key = settings.BREVO_API_KEY
+    if not key or "your_brevo_api_key" in key or "your_api_key" in key:
+        return False
+    return bool(settings.BREVO_FROM_EMAIL)
 
 
 async def queue_alert_email(
@@ -38,16 +41,20 @@ async def queue_alert_email(
 
 
 async def _send_email_async(client: httpx.AsyncClient, to_email: str, subject: str, body: str) -> None:
-    url = "https://api.resend.com/emails"
+    url = "https://api.brevo.com/v3/smtp/email"
     headers = {
-        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "api-key": settings.BREVO_API_KEY,
         "Content-Type": "application/json",
+        "accept": "application/json",
     }
     payload = {
-        "from": settings.RESEND_FROM_EMAIL,
-        "to": [to_email],
+        "sender": {
+            "name": settings.BREVO_SENDER_NAME,
+            "email": settings.BREVO_FROM_EMAIL,
+        },
+        "to": [{"email": to_email}],
         "subject": subject,
-        "text": body,
+        "textContent": body,
     }
     response = await client.post(url, json=payload, headers=headers)
     response.raise_for_status()
@@ -57,8 +64,8 @@ _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
-    if not _resend_configured():
-        log.warning("Resend service is not configured. Skipping email queue dispatch.")
+    if not _brevo_configured():
+        log.warning("Brevo service is not configured. Skipping email queue dispatch.")
         return 0
 
     result = await db.execute(
@@ -90,7 +97,7 @@ async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
                                 exc.response.headers.get("Retry-After", _EMAIL_RETRY_DELAY * attempt)
                             )
                             log.warning(
-                                "Resend transient error, retrying",
+                                "Brevo transient error, retrying",
                                 to_email=email.to_email,
                                 status=exc.response.status_code,
                                 attempt=attempt,
@@ -100,30 +107,34 @@ async def send_pending_emails(db: AsyncSession, batch_size: int = 20) -> int:
                         else:
                             # Non-transient (e.g. 400 bad request) — don't retry
                             log.error(
-                                "Resend non-transient error, skipping",
+                                "Brevo non-transient error, skipping",
                                 to_email=email.to_email,
                                 status=exc.response.status_code,
                                 error=str(exc),
                             )
+                            email.sent = True
+                            email.sent_at = datetime.now(timezone.utc)
                             return False
                     except (httpx.TimeoutException, httpx.ConnectError) as exc:
                         last_exc = exc
                         log.warning(
-                            "Resend network error, retrying",
+                            "Brevo network error, retrying",
                             to_email=email.to_email,
                             attempt=attempt,
                             error=str(exc),
                         )
                         await asyncio.sleep(_EMAIL_RETRY_DELAY * attempt)
                     except Exception as exc:
-                        log.error("Resend unexpected error", to_email=email.to_email, error=str(exc))
+                        log.error("Brevo unexpected error", to_email=email.to_email, error=str(exc))
                         return False
 
                 log.error(
-                    "Resend failed after retries",
+                    "Brevo failed after retries",
                     to_email=email.to_email,
                     error=str(last_exc),
                 )
+                email.sent = True
+                email.sent_at = datetime.now(timezone.utc)
                 return False
 
         results = await asyncio.gather(*(send_one(email) for email in pending), return_exceptions=True)

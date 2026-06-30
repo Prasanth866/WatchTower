@@ -194,11 +194,18 @@ async def get_or_create_account(db: AsyncSession, user_id: UUID) -> PaperAccount
     """
     Atomically get or create the paper account for user_id.
 
-    Uses INSERT ... ON CONFLICT DO NOTHING to avoid a TOCTOU race
-    where two concurrent first-time requests would both SELECT None
-    and both attempt INSERT, causing a UniqueConstraint violation.
+    Uses SELECT first to avoid unnecessary writes/commits on read requests,
+    falling back to INSERT ... ON CONFLICT DO NOTHING if not found.
     """
-    # Attempt upsert-style insert; silently no-ops if the row exists.
+    # 1. Try SELECT first to avoid write overhead on read-heavy requests
+    result = await db.execute(
+        select(PaperAccount).where(PaperAccount.user_id == user_id)
+    )
+    account = result.scalar_one_or_none()
+    if account:
+        return account
+
+    # 2. Only run write transaction if the account is not found
     stmt = (
         pg_insert(PaperAccount)
         .values(
@@ -439,86 +446,19 @@ async def sell_coin(
 
 @router.get("/portfolio")
 async def get_portfolio_status(
-    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Calculate the user's paper trading portfolio valuation, performance, and asset allocation."""
+    """Retrieve details of the user's paper trading account cash and initial balances."""
     account = await get_or_create_account(db, current_user.id)
-
-    holdings_query = await db.execute(
-        select(Holding).where(Holding.account_id == account.id)
-    )
-    holdings = holdings_query.scalars().all()
-
-    holdings_value = Decimal("0")
-    holdings_list = []
-    allocation_dict = {}
-
-    for h in holdings:
-        price_raw, _ = await get_latest_price(request, h.coin_symbol)
-        price = _to_dec(price_raw)
-        qty = _to_dec(h.quantity)
-        avg_buy = _to_dec(h.average_buy_price)
-
-        market_value = _round_money(qty * price)
-        cost_basis = _round_money(qty * avg_buy)
-        unrealized_pnl = market_value - cost_basis
-        unrealized_pnl_pct = (
-            float(_round_money(unrealized_pnl / cost_basis * Decimal("100")))
-            if cost_basis > Decimal("0.01")
-            else 0.0
-        )
-
-        holdings_value += market_value
-        holdings_list.append({
-            "coin": h.coin_symbol.upper(),
-            "quantity": float(_round_qty(qty)),
-            "average_buy_price": float(_round_money(avg_buy)),
-            "current_price": float(_round_money(price)),
-            "market_value": float(market_value),
-            "unrealized_pnl": float(unrealized_pnl),
-            "unrealized_pnl_pct": unrealized_pnl_pct,
-        })
-
-    cash_balance = _to_dec(account.cash_balance)
-    total_value = _round_money(cash_balance + holdings_value)
-
-    if total_value > Decimal("0.01"):
-        allocation_dict["CASH"] = float(_round_money(cash_balance / total_value * Decimal("100")))
-        for h_item in holdings_list:
-            allocation_dict[h_item["coin"]] = float(
-                _round_money(_to_dec(h_item["market_value"]) / total_value * Decimal("100"))
-            )
-    else:
-        allocation_dict["CASH"] = 100.0
-
-    tx_query = await db.execute(
-        select(Transaction).where(Transaction.account_id == account.id)
-    )
-    transactions = list(tx_query.scalars().all())
-    realized_pnl = calculate_realized_pnl(transactions)
-
-    initial = _to_dec(account.initial_balance)
-    total_pnl = float(_round_money(total_value - initial))
-    total_pnl_pct = float(_round_money((total_value - initial) / initial * Decimal("100"))) if initial > 0 else 0.0
-
     return {
-        "cash_balance": float(cash_balance),
-        "holdings_value": float(holdings_value),
-        "total_value": float(total_value),
-        "initial_balance": float(initial),
-        "total_pnl": total_pnl,
-        "total_pnl_pct": total_pnl_pct,
-        "realized_pnl": realized_pnl,
-        "allocation": allocation_dict,
-        "holdings": holdings_list,
+        "cash_balance": float(account.cash_balance),
+        "initial_balance": float(account.initial_balance),
     }
 
 
 @router.get("/holdings")
 async def get_holdings(
-    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -531,28 +471,12 @@ async def get_holdings(
 
     result = []
     for h in holdings:
-        price_raw, _ = await get_latest_price(request, h.coin_symbol)
-        price = _to_dec(price_raw)
         qty = _to_dec(h.quantity)
         avg_buy = _to_dec(h.average_buy_price)
-
-        market_value = _round_money(qty * price)
-        cost_basis = _round_money(qty * avg_buy)
-        unrealized_pnl = market_value - cost_basis
-        unrealized_pnl_pct = (
-            float(_round_money(unrealized_pnl / cost_basis * Decimal("100")))
-            if cost_basis > Decimal("0.01")
-            else 0.0
-        )
-
         result.append({
             "coin": h.coin_symbol.upper(),
             "quantity": float(_round_qty(qty)),
             "average_buy_price": float(_round_money(avg_buy)),
-            "current_price": float(_round_money(price)),
-            "market_value": float(market_value),
-            "unrealized_pnl": float(unrealized_pnl),
-            "unrealized_pnl_pct": unrealized_pnl_pct,
             "updated_at": h.updated_at,
         })
     return result

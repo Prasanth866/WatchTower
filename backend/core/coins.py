@@ -9,6 +9,10 @@ class CoinInfo(BaseModel):
     description: str | None = None
     unit: str
     interval_seconds: int
+    price: float | None = None
+    change24h: float | None = None
+    marketCap: float | None = None
+    totalVolume: float | None = None
 
 
 AVAILABLE_COINS: list[CoinInfo] = [

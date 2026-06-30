@@ -11,9 +11,8 @@ settings = get_settings()
 
 @pytest.mark.asyncio
 async def test_send_pending_emails_returns_zero_if_not_configured() -> None:
-    # Temporarily clear configuration
-    with patch.object(settings, "RESEND_API_KEY", ""), \
-         patch.object(settings, "RESEND_FROM_EMAIL", ""):
+    with patch.object(settings, "BREVO_API_KEY", ""), \
+         patch.object(settings, "BREVO_FROM_EMAIL", ""):
         
         db = AsyncMock(spec=AsyncSession)
         sent = await send_pending_emails(db)
@@ -22,9 +21,9 @@ async def test_send_pending_emails_returns_zero_if_not_configured() -> None:
 
 @pytest.mark.asyncio
 async def test_send_pending_emails_dispatches_http_requests() -> None:
-    # Mock settings
-    with patch.object(settings, "RESEND_API_KEY", "re_testkey123"), \
-         patch.object(settings, "RESEND_FROM_EMAIL", "sender@test.dev"):
+    with patch.object(settings, "BREVO_API_KEY", "xkeysib-testkey123"), \
+         patch.object(settings, "BREVO_FROM_EMAIL", "sender@test.dev"), \
+         patch.object(settings, "BREVO_SENDER_NAME", "WatchTower"):
         
         user_id = uuid4()
         email_record = EmailQueue(
@@ -36,7 +35,6 @@ async def test_send_pending_emails_dispatches_http_requests() -> None:
         )
 
         db = AsyncMock(spec=AsyncSession)
-        # Mock database results
         from unittest.mock import MagicMock
         db_result = MagicMock()
         db_result.scalars.return_value.all.return_value = [email_record]
@@ -57,11 +55,12 @@ async def test_send_pending_emails_dispatches_http_requests() -> None:
             # Assert httpx mock call parameters
             mock_post.assert_called_once()
             args, kwargs = mock_post.call_args
-            assert args[0] == "https://api.resend.com/emails"
-            assert kwargs["headers"]["Authorization"] == "Bearer re_testkey123"
-            assert kwargs["json"]["from"] == "sender@test.dev"
-            assert kwargs["json"]["to"] == ["receiver@test.dev"]
+            assert args[0] == "https://api.brevo.com/v3/smtp/email"
+            assert kwargs["headers"]["api-key"] == "xkeysib-testkey123"
+            assert kwargs["headers"]["accept"] == "application/json"
+            assert kwargs["json"]["sender"] == {"name": "WatchTower", "email": "sender@test.dev"}
+            assert kwargs["json"]["to"] == [{"email": "receiver@test.dev"}]
             assert kwargs["json"]["subject"] == "Alert Test"
-            assert kwargs["json"]["text"] == "Coin threshold breached"
+            assert kwargs["json"]["textContent"] == "Coin threshold breached"
             
             db.commit.assert_called_once()

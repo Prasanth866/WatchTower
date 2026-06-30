@@ -230,6 +230,7 @@ class ConnectionManager:
     async def publish(self, topic: str, event: Event):
         await self._safe_await(self._redis.publish(topic, event.model_dump_json()))
         await self._safe_await(self._redis.set(f"price:{topic}", str(event.value)))
+        await self._safe_await(self._redis.set(f"price_event:{topic}", event.model_dump_json()))
 
     @staticmethod
     def _topic_keys(topic: str) -> list[str]:

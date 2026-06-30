@@ -42,6 +42,9 @@ class CryptoWorker(AbstractWorker):
         params = {
             "ids": coin_ids,
             "vs_currencies": "usd",
+            "include_market_cap": "true",
+            "include_24hr_vol": "true",
+            "include_24hr_change": "true",
         }
         try:
             response = await self.client.get(self.url, params=params)
@@ -61,6 +64,10 @@ class CryptoWorker(AbstractWorker):
             if price is None:
                 continue
 
+            market_cap = coin_data.get("usd_market_cap", 0.0)
+            total_volume = coin_data.get("usd_24h_vol", 0.0)
+            change_24h = coin_data.get("usd_24h_change", 0.0)
+
             events.append(
                 Event(
                     topic=topic,
@@ -70,6 +77,9 @@ class CryptoWorker(AbstractWorker):
                         "coin": coin_id,
                         "source": "coingecko",
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "market_cap": float(market_cap),
+                        "total_volume": float(total_volume),
+                        "change_24h": float(change_24h),
                     },
                 )
             )
