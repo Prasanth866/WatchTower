@@ -213,4 +213,4 @@ __marimo__/
 .idea/
 
 # packages
-node_modules/
+frontend/node_modules/

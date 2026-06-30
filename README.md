@@ -20,7 +20,7 @@ WatchTower is a real-time cryptocurrency portfolio tracking and paper trading si
   - Allocation statistics (e.g. percentage cash vs. coin holdings).
   - Track realized and unrealized gains and losses.
 * **Threshold Alert Notifications**: Configure price alert triggers (e.g. BTC > $65k) which automatically queue email alerts when prices cross targets.
-* **Resend HTTP Email Service**: Sends queued alert emails asynchronously via the Resend HTTP API, with automatic environment fallbacks.
+* **Brevo HTTP Email Service**: Sends queued alert emails asynchronously via the Brevo SMTP HTTP API, with automatic environment fallbacks.
 
 ---
 
@@ -47,8 +47,9 @@ Ensure `.env` contains:
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/mydb
 REDIS_URL=redis://localhost:6379/0
 SECRET_KEY=your-minimum-32-char-secret-key-here
-RESEND_API_KEY=re_your_api_key
-RESEND_FROM_EMAIL=onboarding@resend.dev
+BREVO_API_KEY=your_brevo_api_key
+BREVO_FROM_EMAIL=no-reply@yourdomain.com
+BREVO_SENDER_NAME=WatchTower
 ```
 
 ### 2. Run with Docker Compose
@@ -69,7 +70,7 @@ docker compose up -d --build
 
 ### Running the Python Test Suite
 
-The test suite covers WebSocket auth, Resend HTTP requests, CoinGecko proxy caching, and paper trading orders:
+The test suite covers WebSocket auth, Brevo HTTP requests, CoinGecko proxy caching, and paper trading orders:
 
 ```bash
 cd backend
