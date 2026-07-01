@@ -31,21 +31,29 @@ async def list_coins(request: Request):
     if hasattr(request.app.state, "manager") and hasattr(request.app.state.manager, "redis"):
         redis = request.app.state.manager.redis
 
+    if redis is None:
+        return [coin.model_copy() for coin in AVAILABLE_COINS]
+
+    try:
+        keys = [f"price_event:{coin.symbol}" for coin in AVAILABLE_COINS]
+        cached_events = await cast(Any, redis).mget(keys)
+    except Exception as e:
+        log.error("Failed to batch read price event cache via mget", error=str(e))
+        return [coin.model_copy() for coin in AVAILABLE_COINS]
+
     results = []
-    for coin in AVAILABLE_COINS:
+    for coin, cached_event_str in zip(AVAILABLE_COINS, cached_events):
         coin_copy = coin.model_copy()
-        if redis is not None:
+        if cached_event_str:
             try:
-                cached_event_str = await cast(Any, redis).get(f"price_event:{coin.symbol}")
-                if cached_event_str:
-                    event_data = json.loads(cached_event_str)
-                    coin_copy.price = event_data.get("value")
-                    meta = event_data.get("metadata", {})
-                    coin_copy.marketCap = meta.get("market_cap")
-                    coin_copy.totalVolume = meta.get("total_volume")
-                    coin_copy.change24h = meta.get("change_24h")
+                event_data = json.loads(cached_event_str)
+                coin_copy.price = event_data.get("value")
+                meta = event_data.get("metadata", {})
+                coin_copy.marketCap = meta.get("market_cap")
+                coin_copy.totalVolume = meta.get("total_volume")
+                coin_copy.change24h = meta.get("change_24h")
             except Exception as e:
-                log.error("Failed to read price event cache", coin=coin.symbol, error=str(e))
+                log.error("Failed to parse cached price event data", coin=coin.symbol, error=str(e))
         results.append(coin_copy)
     return results
 
