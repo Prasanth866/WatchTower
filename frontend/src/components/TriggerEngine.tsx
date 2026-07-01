@@ -214,7 +214,7 @@ export const TriggerEngine: React.FC = () => {
                       <div className="flex justify-between">
                         <span className="flex items-center gap-1"><Calendar size={10} /> Expiration</span>
                         <span className="text-zinc-400">
-                          {trigger.expires_at ? new Date(trigger.expires_at).toLocaleDateString() : 'NEVER'}
+                          {trigger.expires_at ? new Date(trigger.expires_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'NEVER'}
                         </span>
                       </div>
                       <div className="flex justify-between border-t border-zinc-900/40 pt-1.5 mt-1">

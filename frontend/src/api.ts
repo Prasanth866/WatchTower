@@ -135,7 +135,7 @@ function _applyPriceEvent(
     ..._prices[id],
     price: value,
     change24h: metadata?.change_24h !== undefined
-      ? Number(metadata.change_24h.toFixed(2))
+      ? metadata.change_24h
       : _prices[id].change24h,
     marketCap: metadata?.market_cap ?? _prices[id].marketCap,
     totalVolume: metadata?.total_volume ?? _prices[id].totalVolume,

@@ -135,7 +135,7 @@ export const TickerRibbon: React.FC<{ onSelectCoin?: (id: CoinId) => void; selec
                   }`}>
                     {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
                     {isUp ? '+' : ''}
-                    {coin.change24h}%
+                    {coin.change24h.toFixed(2)}%
                   </span>
                 </div>
               </button>

@@ -190,7 +190,7 @@ export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSe
                       isUp ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
                       {isUp ? '+' : ''}
-                      {coin.change24h}%
+                      {coin.change24h.toFixed(2)}%
                     </span>
                   </div>
                 </button>
@@ -242,23 +242,23 @@ export const CoinAnalysis: React.FC<CoinAnalysisProps> = ({ selectedCoinId, onSe
               }`}>
                 {activeCoin.change24h >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                 {activeCoin.change24h >= 0 ? '+' : ''}
-                {activeCoin.change24h}% (24H)
+                {activeCoin.change24h.toFixed(2)}% (24H)
               </span>
             </div>
           </div>
 
           {/* Price Metrics Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
+            <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl" title={`$${activeCoin.marketCap.toLocaleString()}`}>
               <span className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">MARKET CAP</span>
               <span className="block text-sm font-bold text-zinc-200 font-mono leading-none">
-                ${activeCoin.marketCap.toLocaleString()}
+                ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(activeCoin.marketCap)}
               </span>
             </div>
-            <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
+            <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl" title={`$${activeCoin.totalVolume.toLocaleString()}`}>
               <span className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">TOTAL VOLUME (24H)</span>
               <span className="block text-sm font-bold text-zinc-200 font-mono leading-none">
-                ${activeCoin.totalVolume.toLocaleString()}
+                ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(activeCoin.totalVolume)}
               </span>
             </div>
             <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">

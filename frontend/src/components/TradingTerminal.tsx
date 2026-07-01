@@ -28,9 +28,11 @@ export const TradingTerminal: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const port = await api.getPortfolio();
-      const holds = await api.getHoldings();
-      const txs = await api.getTransactions();
+      const [port, holds, txs] = await Promise.all([
+        api.getPortfolio(),
+        api.getHoldings(),
+        api.getTransactions(),
+      ]);
       
       setPortfolio(port);
       setHoldings(holds);
@@ -308,9 +310,15 @@ export const TradingTerminal: React.FC = () => {
                     id="buy-amount-input"
                     type="number"
                     step="any"
+                    min="0"
                     required
                     value={buyAmountUsd}
-                    onChange={(e) => setBuyAmountUsd(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseFloat(val) >= 0) {
+                        setBuyAmountUsd(val);
+                      }
+                    }}
                     placeholder="Enter amount in USD"
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg pl-8 pr-4 text-sm font-mono text-zinc-200 outline-none"
                   />
@@ -380,9 +388,15 @@ export const TradingTerminal: React.FC = () => {
                     id="sell-quantity-input"
                     type="number"
                     step="any"
+                    min="0"
                     required
                     value={sellQuantity}
-                    onChange={(e) => setSellQuantity(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseFloat(val) >= 0) {
+                        setSellQuantity(val);
+                      }
+                    }}
                     placeholder={`Enter amount in ${SUPPORTED_COINS[selectedCoin].symbol}`}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 focus:border-rose-500 rounded-lg px-4 text-sm font-mono text-zinc-200 outline-none"
                   />
